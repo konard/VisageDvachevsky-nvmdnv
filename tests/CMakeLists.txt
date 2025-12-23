@@ -9,6 +9,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
+# Qt is optional for tests; pull in targets if available.
+find_package(Qt6 COMPONENTS Core Test QUIET)
+
 # Unit tests
 add_executable(unit_tests
     unit/test_result.cpp
@@ -34,8 +37,8 @@ target_link_libraries(unit_tests
         novelmind_compiler_options
 )
 
-# Link Qt6::Core for test_story_graph.cpp (uses QHash, QList, QSet)
-if(Qt6_FOUND)
+# Link Qt6::Core for tests that may rely on Qt types
+if(TARGET Qt6::Core)
     target_link_libraries(unit_tests PRIVATE Qt6::Core)
 endif()
 
@@ -67,6 +70,9 @@ if(NOVELMIND_BUILD_EDITOR)
             Catch2::Catch2WithMain
             novelmind_compiler_options
     )
+    if(TARGET Qt6::Test)
+        target_link_libraries(integration_tests PRIVATE Qt6::Test)
+    endif()
 
     target_include_directories(integration_tests
         PRIVATE

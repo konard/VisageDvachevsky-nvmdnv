@@ -294,7 +294,7 @@ public slots:
   /**
    * @brief Get all tracks
    */
-  [[nodiscard]] const QMap<QString, TimelineTrack*>& getTracks() const { return m_tracks; }
+  const QMap<QString, TimelineTrack*>& getTracks() const { return m_tracks; }
 
   /**
    * @brief Get current FPS

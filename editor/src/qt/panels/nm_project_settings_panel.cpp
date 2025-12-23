@@ -473,7 +473,7 @@ void NMProjectSettingsPanel::saveToProject() {
   // Save resolution
   if (m_resolutionCombo) {
     QString text = m_resolutionCombo->currentText();
-    int spacePos = text.indexOf(' ');
+    const qsizetype spacePos = text.indexOf(' ');
     QString resolution = spacePos > 0 ? text.left(spacePos) : text;
     meta.targetResolution = resolution.toStdString();
   }
@@ -486,7 +486,7 @@ void NMProjectSettingsPanel::saveToProject() {
   // Save default locale
   if (m_defaultLocaleCombo) {
     QString text = m_defaultLocaleCombo->currentText();
-    int spacePos = text.indexOf(' ');
+    const qsizetype spacePos = text.indexOf(' ');
     QString locale = spacePos > 0 ? text.left(spacePos) : text;
     meta.defaultLocale = locale.toStdString();
   }

@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include "NovelMind/editor/qt/lazy_thumbnail_loader.hpp"
 #include "NovelMind/editor/qt/performance_metrics.hpp"

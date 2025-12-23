@@ -23,7 +23,10 @@
 #include <cstdint>
 #include <functional>
 #include "NovelMind/core/property_system.hpp"
+#include "NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_localization_panel.hpp"
 #include "NovelMind/editor/qt/panels/nm_story_graph_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_timeline_panel.hpp"
 
 namespace NovelMind::editor::qt {
 
@@ -423,7 +426,6 @@ private:
 // =============================================================================
 
 // Forward declarations
-class NMTimelinePanel;
 struct Keyframe;
 
 /**
@@ -520,9 +522,6 @@ private:
 // Localization Commands
 // =============================================================================
 
-// Forward declarations
-class NMLocalizationPanel;
-
 /**
  * @brief Command for adding a localization key
  */
@@ -586,7 +585,6 @@ private:
 // =============================================================================
 
 // Forward declarations
-class NMCurveEditorPanel;
 class CurveData;
 using CurvePointId = uint64_t;
 

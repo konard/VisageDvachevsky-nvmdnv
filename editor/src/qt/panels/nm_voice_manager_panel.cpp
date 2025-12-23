@@ -72,6 +72,7 @@ void NMVoiceManagerPanel::onUpdate([[maybe_unused]] double deltaTime) {
 
 void NMVoiceManagerPanel::setupUI() {
   auto *mainWidget = new QWidget(this);
+  setContentWidget(mainWidget);
   auto *mainLayout = new QVBoxLayout(mainWidget);
   mainLayout->setContentsMargins(0, 0, 0, 0);
   mainLayout->setSpacing(4);
@@ -93,8 +94,6 @@ void NMVoiceManagerPanel::setupUI() {
   m_statsLabel->setStyleSheet("padding: 4px; color: #888;");
   m_statsLabel->setText(tr("0 dialogue lines, 0 matched, 0 unmatched"));
   mainLayout->addWidget(m_statsLabel);
-
-  setContentWidget(mainWidget);
 }
 
 void NMVoiceManagerPanel::setupToolBar() {
@@ -506,7 +505,7 @@ void NMVoiceManagerPanel::updateStatistics() {
     return;
   }
 
-  int total = m_voiceLines.size();
+  int total = static_cast<int>(m_voiceLines.size());
   int matched = 0;
   int verified = 0;
 

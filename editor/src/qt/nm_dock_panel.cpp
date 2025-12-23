@@ -3,6 +3,7 @@
 #include <QFocusEvent>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QWidget>
 
 namespace NovelMind::editor::qt {
 
@@ -16,6 +17,9 @@ NMDockPanel::NMDockPanel(const QString& title, QWidget* parent)
 
     // Enable focus tracking
     setFocusPolicy(Qt::StrongFocus);
+
+    // Ensure every panel has a concrete content widget by default.
+    setContentWidget(new QWidget(this));
 }
 
 NMDockPanel::~NMDockPanel()

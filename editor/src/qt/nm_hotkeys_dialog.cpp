@@ -124,4 +124,21 @@ void NMHotkeysDialog::applyFilter(const QString &text) {
   }
 }
 
+void NMHotkeysDialog::onItemDoubleClicked(QTreeWidgetItem *item, int column) {
+  Q_UNUSED(item);
+  Q_UNUSED(column);
+}
+
+void NMHotkeysDialog::onRecordShortcut() {}
+
+void NMHotkeysDialog::onResetToDefault() {}
+
+void NMHotkeysDialog::onResetAllToDefaults() {}
+
+void NMHotkeysDialog::onExportClicked() {}
+
+void NMHotkeysDialog::onImportClicked() {}
+
+void NMHotkeysDialog::onApplyClicked() {}
+
 } // namespace NovelMind::editor::qt

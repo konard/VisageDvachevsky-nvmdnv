@@ -221,7 +221,7 @@ QString NMNewProjectDialog::resolution() const {
   }
   QString text = m_resolutionCombo->currentText();
   // Extract just the resolution part (e.g., "1920x1080" from "1920x1080 (Full HD)")
-  int spacePos = text.indexOf(' ');
+  const qsizetype spacePos = text.indexOf(' ');
   return spacePos > 0 ? text.left(spacePos) : text;
 }
 
@@ -231,7 +231,7 @@ QString NMNewProjectDialog::locale() const {
   }
   QString text = m_localeCombo->currentText();
   // Extract just the locale code (e.g., "en" from "en (English)")
-  int spacePos = text.indexOf(' ');
+  const qsizetype spacePos = text.indexOf(' ');
   return spacePos > 0 ? text.left(spacePos) : text;
 }
 

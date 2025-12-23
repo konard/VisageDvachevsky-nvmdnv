@@ -309,8 +309,18 @@ void NMMainWindow::setupConnections() {
                                                     const QString &actionName,
                                                     QAction *action,
                                                     const QString &notes = QString()) {
-      entries.push_back(
-          {section, actionName, shortcutText(action), notes});
+      const QString shortcut = shortcutText(action);
+      NMHotkeyEntry entry;
+      entry.id = action ? action->objectName() : actionName;
+      if (entry.id.isEmpty()) {
+        entry.id = actionName;
+      }
+      entry.section = section;
+      entry.action = actionName;
+      entry.shortcut = shortcut;
+      entry.defaultShortcut = shortcut;
+      entry.notes = notes;
+      entries.push_back(entry);
     };
 
     addActionEntry(tr("File"), tr("New Project"), m_actionNewProject);
@@ -351,43 +361,55 @@ void NMMainWindow::setupConnections() {
     addActionEntry(tr("UI Scale"), tr("Scale Up"), m_actionUiScaleUp);
     addActionEntry(tr("UI Scale"), tr("Scale Reset"), m_actionUiScaleReset);
 
-    entries.push_back({tr("Script Editor"), tr("Completion"), tr("Ctrl+Space"),
-                       tr("Trigger code suggestions")});
-    entries.push_back({tr("Script Editor"), tr("Save Script"), tr("Ctrl+S"),
-                       tr("Save current script tab")});
+    auto addStaticEntry = [&entries](const QString &section, const QString &action,
+                                     const QString &shortcut, const QString &notes) {
+      NMHotkeyEntry entry;
+      entry.id = section + "." + action;
+      entry.section = section;
+      entry.action = action;
+      entry.shortcut = shortcut;
+      entry.defaultShortcut = shortcut;
+      entry.notes = notes;
+      entries.push_back(entry);
+    };
 
-    entries.push_back({tr("Story Graph"), tr("Connect Nodes"), tr("Ctrl+Drag"),
-                       tr("Drag from output port to input")});
-    entries.push_back({tr("Story Graph"), tr("Pan View"), tr("Middle Mouse"),
-                       tr("Hold and drag to pan")});
-    entries.push_back({tr("Story Graph"), tr("Zoom"), tr("Mouse Wheel"),
-                       tr("Scroll to zoom in/out")});
+    addStaticEntry(tr("Script Editor"), tr("Completion"), tr("Ctrl+Space"),
+                   tr("Trigger code suggestions"));
+    addStaticEntry(tr("Script Editor"), tr("Save Script"), tr("Ctrl+S"),
+                   tr("Save current script tab"));
 
-    entries.push_back({tr("Scene View"), tr("Pan View"), tr("Middle Mouse"),
-                       tr("Hold and drag to pan")});
-    entries.push_back({tr("Scene View"), tr("Zoom"), tr("Mouse Wheel"),
-                       tr("Scroll to zoom in/out")});
-    entries.push_back({tr("Scene View"), tr("Frame Selected"), tr("F"),
-                       tr("Focus camera on selected object")});
-    entries.push_back({tr("Scene View"), tr("Frame All"), tr("A"),
-                       tr("Frame everything in view")});
-    entries.push_back({tr("Scene View"), tr("Toggle Grid"), tr("G"),
-                       tr("Show/hide grid")});
-    entries.push_back({tr("Scene View"), tr("Copy Object"), tr("Ctrl+C"),
-                       tr("Copy selected object")});
-    entries.push_back({tr("Scene View"), tr("Paste Object"), tr("Ctrl+V"),
-                       tr("Paste copied object")});
-    entries.push_back({tr("Scene View"), tr("Duplicate Object"), tr("Ctrl+D"),
-                       tr("Duplicate selected object")});
-    entries.push_back({tr("Scene View"), tr("Rename Object"), tr("F2"),
-                       tr("Rename selected object")});
-    entries.push_back({tr("Scene View"), tr("Delete Object"), tr("Del"),
-                       tr("Delete selected object")});
+    addStaticEntry(tr("Story Graph"), tr("Connect Nodes"), tr("Ctrl+Drag"),
+                   tr("Drag from output port to input"));
+    addStaticEntry(tr("Story Graph"), tr("Pan View"), tr("Middle Mouse"),
+                   tr("Hold and drag to pan"));
+    addStaticEntry(tr("Story Graph"), tr("Zoom"), tr("Mouse Wheel"),
+                   tr("Scroll to zoom in/out"));
 
-    entries.push_back({tr("Docking"), tr("Move Panel"), QString(),
-                       tr("Drag panel tabs to dock anywhere")});
-    entries.push_back({tr("Docking"), tr("Tab Panels"), QString(),
-                       tr("Drop a panel on another to create tabs")});
+    addStaticEntry(tr("Scene View"), tr("Pan View"), tr("Middle Mouse"),
+                   tr("Hold and drag to pan"));
+    addStaticEntry(tr("Scene View"), tr("Zoom"), tr("Mouse Wheel"),
+                   tr("Scroll to zoom in/out"));
+    addStaticEntry(tr("Scene View"), tr("Frame Selected"), tr("F"),
+                   tr("Focus camera on selected object"));
+    addStaticEntry(tr("Scene View"), tr("Frame All"), tr("A"),
+                   tr("Frame everything in view"));
+    addStaticEntry(tr("Scene View"), tr("Toggle Grid"), tr("G"),
+                   tr("Show/hide grid"));
+    addStaticEntry(tr("Scene View"), tr("Copy Object"), tr("Ctrl+C"),
+                   tr("Copy selected object"));
+    addStaticEntry(tr("Scene View"), tr("Paste Object"), tr("Ctrl+V"),
+                   tr("Paste copied object"));
+    addStaticEntry(tr("Scene View"), tr("Duplicate Object"), tr("Ctrl+D"),
+                   tr("Duplicate selected object"));
+    addStaticEntry(tr("Scene View"), tr("Rename Object"), tr("F2"),
+                   tr("Rename selected object"));
+    addStaticEntry(tr("Scene View"), tr("Delete Object"), tr("Del"),
+                   tr("Delete selected object"));
+
+    addStaticEntry(tr("Docking"), tr("Move Panel"), QString(),
+                   tr("Drag panel tabs to dock anywhere"));
+    addStaticEntry(tr("Docking"), tr("Tab Panels"), QString(),
+                   tr("Drop a panel on another to create tabs"));
 
     NMHotkeysDialog dialog(entries, this);
     dialog.exec();

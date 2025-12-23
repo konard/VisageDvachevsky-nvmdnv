@@ -63,6 +63,20 @@ void NMBuildSettingsPanel::setupUI() {
   layout->addWidget(m_buildButton);
 }
 
+void NMBuildSettingsPanel::onPlatformChanged(int index) { Q_UNUSED(index); }
+
+void NMBuildSettingsPanel::onProfileChanged(int index) { Q_UNUSED(index); }
+
+void NMBuildSettingsPanel::onBrowseOutput() {}
+
+void NMBuildSettingsPanel::onBuildClicked() {}
+
+void NMBuildSettingsPanel::onCancelClicked() {}
+
+void NMBuildSettingsPanel::onWarningDoubleClicked(int row) { Q_UNUSED(row); }
+
+void NMBuildSettingsPanel::onRefreshPreview() {}
+
 void NMBuildSettingsPanel::onUpdate([[maybe_unused]] double deltaTime) {}
 
 } // namespace NovelMind::editor::qt

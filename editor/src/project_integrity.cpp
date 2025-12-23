@@ -14,6 +14,19 @@ namespace fs = std::filesystem;
 
 namespace NovelMind::editor {
 
+namespace {
+bool readFileToString(const fs::path &path, std::string &out) {
+  std::ifstream file(path, std::ios::in | std::ios::binary);
+  if (!file.is_open()) {
+    return false;
+  }
+  std::ostringstream buffer;
+  buffer << file.rdbuf();
+  out = buffer.str();
+  return true;
+}
+} // namespace
+
 // ============================================================================
 // IntegrityReport Implementation
 // ============================================================================
@@ -482,9 +495,10 @@ void ProjectIntegrityChecker::collectAssetReferences() {
     for (const auto &entry : fs::recursive_directory_iterator(scenesDir)) {
       if (entry.path().extension() == ".nmscene" ||
           entry.path().extension() == ".json") {
-        std::ifstream file(entry.path());
-        std::string content((std::istreambuf_iterator<char>(file)),
-                            std::istreambuf_iterator<char>());
+        std::string content;
+        if (!readFileToString(entry.path(), content)) {
+          continue;
+        }
 
         std::smatch match;
         std::string::const_iterator searchStart(content.cbegin());
@@ -505,9 +519,10 @@ void ProjectIntegrityChecker::collectAssetReferences() {
 
     for (const auto &entry : fs::recursive_directory_iterator(scriptsDir)) {
       if (entry.path().extension() == ".nms") {
-        std::ifstream file(entry.path());
-        std::string content((std::istreambuf_iterator<char>(file)),
-                            std::istreambuf_iterator<char>());
+        std::string content;
+        if (!readFileToString(entry.path(), content)) {
+          continue;
+        }
 
         std::smatch match;
         std::string::const_iterator searchStart(content.cbegin());
@@ -643,9 +658,10 @@ void ProjectIntegrityChecker::scanLocalizationFiles() {
       std::string locale = entry.path().stem().string();
       std::vector<std::string> keys;
 
-      std::ifstream file(entry.path());
-      std::string content((std::istreambuf_iterator<char>(file)),
-                          std::istreambuf_iterator<char>());
+      std::string content;
+      if (!readFileToString(entry.path(), content)) {
+        continue;
+      }
 
       std::smatch match;
       std::string::const_iterator searchStart(content.cbegin());
@@ -754,8 +770,12 @@ void ProjectIntegrityChecker::checkStoryGraphStructure(
   for (const auto &entry : fs::directory_iterator(scriptsDir)) {
     if (entry.path().extension() == ".nms") {
       std::ifstream file(entry.path());
-      std::string content((std::istreambuf_iterator<char>(file)),
-                          std::istreambuf_iterator<char>());
+      if (!file) {
+        continue;
+      }
+      std::ostringstream buffer;
+      buffer << file.rdbuf();
+      std::string content = buffer.str();
 
       // Look for scene definitions
       if (content.find("scene main") != std::string::npos ||
@@ -803,9 +823,10 @@ void ProjectIntegrityChecker::checkDeadEnds(
 
   for (const auto &entry : fs::recursive_directory_iterator(scriptsDir)) {
     if (entry.path().extension() == ".nms") {
-      std::ifstream file(entry.path());
-      std::string content((std::istreambuf_iterator<char>(file)),
-                          std::istreambuf_iterator<char>());
+      std::string content;
+      if (!readFileToString(entry.path(), content)) {
+        continue;
+      }
 
       std::smatch sceneMatch;
       std::string::const_iterator searchStart(content.cbegin());
@@ -815,7 +836,8 @@ void ProjectIntegrityChecker::checkDeadEnds(
         std::string sceneName = sceneMatch[1].str();
 
         // Find the scene content (simplified - real implementation would parse braces)
-        size_t braceStart = content.find('{', sceneMatch.position());
+        size_t braceStart = content.find(
+            '{', static_cast<std::string::size_type>(sceneMatch.position()));
         if (braceStart == std::string::npos) {
           searchStart = sceneMatch.suffix().first;
           continue;
@@ -1050,10 +1072,10 @@ Result<void> addMissingLocalizationKey(const std::string &projectPath,
   }
 
   // Read existing content
-  std::ifstream inFile(locFile);
-  std::string content((std::istreambuf_iterator<char>(inFile)),
-                      std::istreambuf_iterator<char>());
-  inFile.close();
+  std::string content;
+  if (!readFileToString(locFile, content)) {
+    return Result<void>::error("Failed to read localization file");
+  }
 
   // Find last key-value pair and add new one
   size_t lastBrace = content.rfind('}');

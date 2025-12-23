@@ -375,9 +375,52 @@ void NMTimelinePanel::addTrack(TimelineTrackType type, const QString &name) {
   case TimelineTrackType::Effect:
     track->color = QColor("#00BCD4");
     break;
+  case TimelineTrackType::Dialogue:
+    track->color = QColor("#8BC34A");
+    break;
+  case TimelineTrackType::Variable:
+    track->color = QColor("#9E9E9E");
+    break;
   }
 
   m_tracks[name] = track;
+  renderTracks();
+}
+
+void NMTimelinePanel::jumpToNextKeyframe() {}
+
+void NMTimelinePanel::jumpToPrevKeyframe() {}
+
+void NMTimelinePanel::duplicateSelectedKeyframes(int offsetFrames) {
+  Q_UNUSED(offsetFrames);
+}
+
+void NMTimelinePanel::setSelectedKeyframesEasing(EasingType easing) {
+  Q_UNUSED(easing);
+}
+
+void NMTimelinePanel::copySelectedKeyframes() {}
+
+void NMTimelinePanel::pasteKeyframes() {}
+
+void NMTimelinePanel::onPlayModeFrameChanged(int frame) { setCurrentFrame(frame); }
+
+void NMTimelinePanel::setSnapToGrid(bool enabled) {
+  if (m_snapToGrid == enabled) {
+    return;
+  }
+  m_snapToGrid = enabled;
+  renderTracks();
+}
+
+void NMTimelinePanel::setGridSize(int frames) {
+  if (frames < 1) {
+    frames = 1;
+  }
+  if (m_gridSize == frames) {
+    return;
+  }
+  m_gridSize = frames;
   renderTracks();
 }
 
@@ -551,8 +594,8 @@ void NMTimelinePanel::renderTracks() {
   updatePlayhead();
 
   // Record performance metrics
-  double renderTimeMs = timer.elapsed();
-  int itemCount = m_timelineScene->items().count();
+  double renderTimeMs = static_cast<double>(timer.elapsed());
+  int itemCount = static_cast<int>(m_timelineScene->items().count());
   recordRenderMetrics(renderTimeMs, itemCount);
 }
 

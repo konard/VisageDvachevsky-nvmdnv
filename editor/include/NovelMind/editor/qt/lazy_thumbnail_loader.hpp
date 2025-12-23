@@ -206,7 +206,7 @@ private:
   std::atomic<bool> m_shuttingDown{false};
   mutable std::atomic<int> m_hitCount{0};
   mutable std::atomic<int> m_missCount{0};
-  std::atomic<qint64> m_accessCounter{0};
+  mutable std::atomic<qint64> m_accessCounter{0};
 };
 
 } // namespace NovelMind::editor::qt

@@ -234,9 +234,9 @@ LazyThumbnailLoader::CacheStats LazyThumbnailLoader::getStats() const {
   QMutexLocker locker(&m_mutex);
 
   CacheStats stats;
-  stats.cachedCount = m_cache.count();
-  stats.pendingCount = m_pendingQueue.size();
-  stats.activeCount = m_activeTasks.size();
+  stats.cachedCount = static_cast<int>(m_cache.count());
+  stats.pendingCount = static_cast<int>(m_pendingQueue.size());
+  stats.activeCount = static_cast<int>(m_activeTasks.size());
   stats.cacheSizeKB = m_cache.totalCost();
   stats.maxCacheSizeKB = m_cache.maxCost();
   stats.hitCount = m_hitCount.load();

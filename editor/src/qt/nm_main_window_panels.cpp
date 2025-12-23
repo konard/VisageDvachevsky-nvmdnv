@@ -193,6 +193,7 @@ void NMMainWindow::configureDocking() {
   configureDock(m_playToolbarPanel);
   configureDock(m_debugOverlayPanel);
   configureDock(m_issuesPanel);
+  configureDock(m_diagnosticsPanel);
 
   applyDockLockState(m_layoutLocked);
   applyTabbedDockMode(m_tabbedDockOnly);

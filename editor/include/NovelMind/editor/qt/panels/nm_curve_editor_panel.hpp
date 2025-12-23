@@ -209,7 +209,7 @@ public:
   /**
    * @brief Get current curve ID
    */
-  QString curveId() const { return m_curveId; }
+  const QString &curveId() const { return m_curveId; }
 
   /**
    * @brief Get curve data model

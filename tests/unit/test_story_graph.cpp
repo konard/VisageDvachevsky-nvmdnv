@@ -4,44 +4,52 @@
 // Full Qt-based tests for the UI components would require Qt Test framework
 
 // Standalone cycle detection algorithm test
-#include <QHash>
-#include <QList>
-#include <QSet>
-#include <functional>
 #include <algorithm>
+#include <cstdint>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace {
 
 // Standalone implementation of cycle detection for testing
 // (mirrors the logic from NMStoryGraphScene::wouldCreateCycle)
-bool wouldCreateCycle(uint64_t fromNodeId, uint64_t toNodeId,
-                      const QHash<uint64_t, QList<uint64_t>> &adjacencyList) {
+bool wouldCreateCycle(
+    uint64_t fromNodeId,
+    uint64_t toNodeId,
+    const std::unordered_map<uint64_t, std::vector<uint64_t>> &adjacencyList) {
   if (fromNodeId == toNodeId) {
     return true; // Self-loop
   }
 
   // Build adjacency list with the proposed edge
-  QHash<uint64_t, QList<uint64_t>> adj = adjacencyList;
-  adj[fromNodeId].append(toNodeId);
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj = adjacencyList;
+  adj[fromNodeId].push_back(toNodeId);
 
   // DFS from 'to' to see if we can reach 'from'
-  QSet<uint64_t> visited;
-  QList<uint64_t> stack;
-  stack.append(toNodeId);
+  std::unordered_set<uint64_t> visited;
+  std::vector<uint64_t> stack;
+  stack.push_back(toNodeId);
 
-  while (!stack.isEmpty()) {
-    uint64_t current = stack.takeLast();
+  while (!stack.empty()) {
+    uint64_t current = stack.back();
+    stack.pop_back();
     if (current == fromNodeId) {
       return true; // Found a cycle
     }
-    if (visited.contains(current)) {
+    if (visited.find(current) != visited.end()) {
       continue;
     }
     visited.insert(current);
 
-    for (uint64_t next : adj.value(current)) {
-      if (!visited.contains(next)) {
-        stack.append(next);
+    auto it = adj.find(current);
+    if (it == adj.end()) {
+      continue;
+    }
+    for (uint64_t next : it->second) {
+      if (visited.find(next) == visited.end()) {
+        stack.push_back(next);
       }
     }
   }
@@ -50,52 +58,57 @@ bool wouldCreateCycle(uint64_t fromNodeId, uint64_t toNodeId,
 }
 
 // Standalone implementation of Tarjan's algorithm for cycle detection
-QList<QList<uint64_t>> detectCycles(const QSet<uint64_t> &allNodes,
-                                    const QHash<uint64_t, QList<uint64_t>> &adjacencyList) {
-  QList<QList<uint64_t>> cycles;
+std::vector<std::vector<uint64_t>> detectCycles(
+    const std::unordered_set<uint64_t> &allNodes,
+    const std::unordered_map<uint64_t, std::vector<uint64_t>> &adjacencyList) {
+  std::vector<std::vector<uint64_t>> cycles;
 
   // Tarjan's algorithm for strongly connected components
-  QHash<uint64_t, int> index;
-  QHash<uint64_t, int> lowlink;
-  QSet<uint64_t> onStack;
-  QList<uint64_t> stack;
+  std::unordered_map<uint64_t, int> index;
+  std::unordered_map<uint64_t, int> lowlink;
+  std::unordered_set<uint64_t> onStack;
+  std::vector<uint64_t> stack;
   int nextIndex = 0;
 
   std::function<void(uint64_t)> strongconnect = [&](uint64_t v) {
     index[v] = nextIndex;
     lowlink[v] = nextIndex;
     nextIndex++;
-    stack.append(v);
+    stack.push_back(v);
     onStack.insert(v);
 
-    for (uint64_t w : adjacencyList.value(v)) {
-      if (!index.contains(w)) {
+    auto it = adjacencyList.find(v);
+    if (it != adjacencyList.end()) {
+      for (uint64_t w : it->second) {
+        if (index.find(w) == index.end()) {
         strongconnect(w);
-        lowlink[v] = qMin(lowlink[v], lowlink[w]);
-      } else if (onStack.contains(w)) {
-        lowlink[v] = qMin(lowlink[v], index[w]);
+        lowlink[v] = std::min(lowlink[v], lowlink[w]);
+        } else if (onStack.find(w) != onStack.end()) {
+          lowlink[v] = std::min(lowlink[v], index[w]);
+        }
       }
     }
 
     // If v is a root node, pop the stack and generate an SCC
     if (lowlink[v] == index[v]) {
-      QList<uint64_t> component;
+      std::vector<uint64_t> component;
       uint64_t w;
       do {
-        w = stack.takeLast();
-        onStack.remove(w);
-        component.append(w);
+        w = stack.back();
+        stack.pop_back();
+        onStack.erase(w);
+        component.push_back(w);
       } while (w != v);
 
       // Only report SCCs with more than one node (actual cycles)
       if (component.size() > 1) {
-        cycles.append(component);
+        cycles.push_back(component);
       }
     }
   };
 
   for (uint64_t nodeId : allNodes) {
-    if (!index.contains(nodeId)) {
+    if (index.find(nodeId) == index.end()) {
       strongconnect(nodeId);
     }
   }
@@ -106,7 +119,7 @@ QList<QList<uint64_t>> detectCycles(const QSet<uint64_t> &allNodes,
 } // anonymous namespace
 
 TEST_CASE("Story Graph - Self loop detection", "[story_graph][cycle]") {
-  QHash<uint64_t, QList<uint64_t>> adj;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
 
   SECTION("Self-loop is detected") {
     bool hasCycle = wouldCreateCycle(1, 1, adj);
@@ -115,7 +128,7 @@ TEST_CASE("Story Graph - Self loop detection", "[story_graph][cycle]") {
 }
 
 TEST_CASE("Story Graph - Simple cycle detection", "[story_graph][cycle]") {
-  QHash<uint64_t, QList<uint64_t>> adj;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
 
   SECTION("No cycle in linear graph") {
     // 1 -> 2 -> 3
@@ -145,7 +158,7 @@ TEST_CASE("Story Graph - Simple cycle detection", "[story_graph][cycle]") {
 }
 
 TEST_CASE("Story Graph - Complex cycle detection", "[story_graph][cycle]") {
-  QHash<uint64_t, QList<uint64_t>> adj;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
 
   SECTION("No cycle in DAG") {
     // Diamond pattern: 1 -> 2, 1 -> 3, 2 -> 4, 3 -> 4
@@ -182,19 +195,19 @@ TEST_CASE("Story Graph - Complex cycle detection", "[story_graph][cycle]") {
 TEST_CASE("Story Graph - Tarjan's algorithm cycle detection",
           "[story_graph][cycle]") {
   SECTION("No cycles in DAG") {
-    QSet<uint64_t> nodes = {1, 2, 3, 4};
-    QHash<uint64_t, QList<uint64_t>> adj;
+    std::unordered_set<uint64_t> nodes = {1, 2, 3, 4};
+    std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
     adj[1] = {2, 3};
     adj[2] = {4};
     adj[3] = {4};
 
     auto cycles = detectCycles(nodes, adj);
-    CHECK(cycles.isEmpty());
+    CHECK(cycles.empty());
   }
 
   SECTION("Single cycle detected") {
-    QSet<uint64_t> nodes = {1, 2, 3};
-    QHash<uint64_t, QList<uint64_t>> adj;
+    std::unordered_set<uint64_t> nodes = {1, 2, 3};
+    std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
     adj[1] = {2};
     adj[2] = {3};
     adj[3] = {1}; // Cycle: 1 -> 2 -> 3 -> 1
@@ -203,14 +216,14 @@ TEST_CASE("Story Graph - Tarjan's algorithm cycle detection",
     CHECK(cycles.size() == 1);
     CHECK(cycles[0].size() == 3);
     // All nodes should be in the cycle
-    CHECK(cycles[0].contains(1));
-    CHECK(cycles[0].contains(2));
-    CHECK(cycles[0].contains(3));
+    CHECK(std::find(cycles[0].begin(), cycles[0].end(), 1) != cycles[0].end());
+    CHECK(std::find(cycles[0].begin(), cycles[0].end(), 2) != cycles[0].end());
+    CHECK(std::find(cycles[0].begin(), cycles[0].end(), 3) != cycles[0].end());
   }
 
   SECTION("Multiple cycles detected") {
-    QSet<uint64_t> nodes = {1, 2, 3, 4, 5, 6};
-    QHash<uint64_t, QList<uint64_t>> adj;
+    std::unordered_set<uint64_t> nodes = {1, 2, 3, 4, 5, 6};
+    std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
     // Cycle 1: 1 -> 2 -> 1
     adj[1] = {2};
     adj[2] = {1};
@@ -225,8 +238,8 @@ TEST_CASE("Story Graph - Tarjan's algorithm cycle detection",
   }
 
   SECTION("Nested strongly connected component") {
-    QSet<uint64_t> nodes = {1, 2, 3, 4};
-    QHash<uint64_t, QList<uint64_t>> adj;
+    std::unordered_set<uint64_t> nodes = {1, 2, 3, 4};
+    std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
     // All nodes form one big SCC: 1 -> 2 -> 3 -> 4 -> 1
     adj[1] = {2};
     adj[2] = {3};
@@ -240,12 +253,12 @@ TEST_CASE("Story Graph - Tarjan's algorithm cycle detection",
 }
 
 TEST_CASE("Story Graph - Empty graph", "[story_graph][cycle]") {
-  QSet<uint64_t> nodes;
-  QHash<uint64_t, QList<uint64_t>> adj;
+  std::unordered_set<uint64_t> nodes;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
 
   SECTION("Empty graph has no cycles") {
     auto cycles = detectCycles(nodes, adj);
-    CHECK(cycles.isEmpty());
+    CHECK(cycles.empty());
   }
 
   SECTION("Adding edge to empty graph creates no cycle") {
@@ -256,21 +269,21 @@ TEST_CASE("Story Graph - Empty graph", "[story_graph][cycle]") {
 
 TEST_CASE("Story Graph - Large graph performance", "[story_graph][cycle][!benchmark]") {
   // Create a large DAG to test O(V+E) performance
-  QSet<uint64_t> nodes;
-  QHash<uint64_t, QList<uint64_t>> adj;
+  std::unordered_set<uint64_t> nodes;
+  std::unordered_map<uint64_t, std::vector<uint64_t>> adj;
 
-  const int numNodes = 1000;
-  for (int i = 1; i <= numNodes; ++i) {
+  const uint64_t numNodes = 1000;
+  for (uint64_t i = 1; i <= numNodes; ++i) {
     nodes.insert(i);
     if (i < numNodes) {
       // Each node connects to next node (linear chain)
-      adj[i].append(i + 1);
+      adj[i].push_back(i + 1);
     }
   }
 
   SECTION("Large DAG has no cycles") {
     auto cycles = detectCycles(nodes, adj);
-    CHECK(cycles.isEmpty());
+    CHECK(cycles.empty());
   }
 
   SECTION("Cycle check at end of large chain") {

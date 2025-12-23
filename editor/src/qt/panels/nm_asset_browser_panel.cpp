@@ -32,6 +32,12 @@
 #include <QScrollBar>
 #include <QTimer>
 
+#if defined(__GNUC__)
+// Suppress GCC false positives in Qt container inlines for this translation unit.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnull-dereference"
+#endif
+
 namespace NovelMind::editor::qt {
 
 namespace {
@@ -1215,7 +1221,7 @@ void NMAssetBrowserPanel::updateVisibleItems() {
 
   // Record metrics
   PerformanceMetrics::instance().recordCount("AssetBrowser.visibleItems",
-                                              m_visiblePaths.size());
+                                              static_cast<int>(m_visiblePaths.size()));
   auto stats = m_lazyLoader->getStats();
   PerformanceMetrics::instance().recordCount(
       PerformanceMetrics::METRIC_CACHE_SIZE_KB,
@@ -1242,6 +1248,24 @@ void NMAssetBrowserPanel::onLazyThumbnailReady(const QString &path,
   }
 }
 
+void NMAssetBrowserPanel::onRenameAction() {}
+
+void NMAssetBrowserPanel::onDeleteAction() {}
+
+void NMAssetBrowserPanel::onDuplicateAction() {}
+
+void NMAssetBrowserPanel::onReimportAction() {}
+
+void NMAssetBrowserPanel::onShowInExplorerAction() {}
+
+void NMAssetBrowserPanel::onCopyPathAction() {}
+
+void NMAssetBrowserPanel::onCopyIdAction() {}
+
 } // namespace NovelMind::editor::qt
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 

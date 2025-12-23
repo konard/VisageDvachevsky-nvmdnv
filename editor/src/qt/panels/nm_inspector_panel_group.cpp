@@ -486,6 +486,9 @@ QWidget *NMPropertyGroup::addEditableProperty(const QString &propertyName,
     break;
   }
 
+  case NMPropertyType::Range:
+    // Range uses float editor until range metadata is available.
+    [[fallthrough]];
   case NMPropertyType::Float: {
     auto *doubleSpinBox = new QDoubleSpinBox();
     doubleSpinBox->setProperty("propertyName", propertyName);
