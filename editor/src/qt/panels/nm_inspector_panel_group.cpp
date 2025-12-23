@@ -737,6 +737,171 @@ QWidget *NMPropertyGroup::addEditableProperty(const QString &propertyName,
     editor = assetButton;
     break;
   }
+
+  case NMPropertyType::Vector2: {
+    // Create container widget for vector components
+    auto *vectorWidget = new QWidget();
+    vectorWidget->setProperty("propertyName", propertyName);
+    auto *vectorLayout = new QHBoxLayout(vectorWidget);
+    vectorLayout->setContentsMargins(0, 0, 0, 0);
+    vectorLayout->setSpacing(4);
+
+    // Parse current value (format: "x,y")
+    QStringList components = currentValue.split(',');
+    double x = components.size() > 0 ? components[0].toDouble() : 0.0;
+    double y = components.size() > 1 ? components[1].toDouble() : 0.0;
+
+    // Create spinboxes for X and Y
+    auto createVectorSpinBox = [&palette](const QString &componentLabel,
+                                          double value) -> QDoubleSpinBox * {
+      auto *spinBox = new QDoubleSpinBox();
+      spinBox->setPrefix(componentLabel + ": ");
+      spinBox->setRange(-999999.0, 999999.0);
+      spinBox->setDecimals(3);
+      spinBox->setValue(value);
+      spinBox->setStyleSheet(QString("QDoubleSpinBox {"
+                                     "  background-color: %1;"
+                                     "  color: %2;"
+                                     "  border: 1px solid %3;"
+                                     "  border-radius: 3px;"
+                                     "  padding: 4px;"
+                                     "}")
+                                 .arg(palette.bgDark.name())
+                                 .arg(palette.textPrimary.name())
+                                 .arg(palette.borderDark.name()));
+      return spinBox;
+    };
+
+    auto *xSpinBox = createVectorSpinBox("X", x);
+    auto *ySpinBox = createVectorSpinBox("Y", y);
+
+    vectorLayout->addWidget(xSpinBox);
+    vectorLayout->addWidget(ySpinBox);
+
+    // Use debounce timer to prevent spamming property updates
+    auto *debounceTimer = new QTimer(vectorWidget);
+    debounceTimer->setSingleShot(true);
+    debounceTimer->setInterval(150);
+
+    auto emitVectorChange = [this, propertyName, xSpinBox, ySpinBox]() {
+      QString value = QString("%1,%2")
+                          .arg(xSpinBox->value(), 0, 'f', 3)
+                          .arg(ySpinBox->value(), 0, 'f', 3);
+      emit propertyValueChanged(propertyName, value);
+    };
+
+    connect(debounceTimer, &QTimer::timeout, this, emitVectorChange);
+
+    connect(xSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [debounceTimer]() { debounceTimer->start(); });
+    connect(ySpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [debounceTimer]() { debounceTimer->start(); });
+
+    editor = vectorWidget;
+    break;
+  }
+
+  case NMPropertyType::Vector3: {
+    // Create container widget for vector components
+    auto *vectorWidget = new QWidget();
+    vectorWidget->setProperty("propertyName", propertyName);
+    auto *vectorLayout = new QHBoxLayout(vectorWidget);
+    vectorLayout->setContentsMargins(0, 0, 0, 0);
+    vectorLayout->setSpacing(4);
+
+    // Parse current value (format: "x,y,z")
+    QStringList components = currentValue.split(',');
+    double x = components.size() > 0 ? components[0].toDouble() : 0.0;
+    double y = components.size() > 1 ? components[1].toDouble() : 0.0;
+    double z = components.size() > 2 ? components[2].toDouble() : 0.0;
+
+    // Create spinboxes for X, Y, and Z
+    auto createVectorSpinBox = [&palette](const QString &componentLabel,
+                                          double value) -> QDoubleSpinBox * {
+      auto *spinBox = new QDoubleSpinBox();
+      spinBox->setPrefix(componentLabel + ": ");
+      spinBox->setRange(-999999.0, 999999.0);
+      spinBox->setDecimals(3);
+      spinBox->setValue(value);
+      spinBox->setStyleSheet(QString("QDoubleSpinBox {"
+                                     "  background-color: %1;"
+                                     "  color: %2;"
+                                     "  border: 1px solid %3;"
+                                     "  border-radius: 3px;"
+                                     "  padding: 4px;"
+                                     "}")
+                                 .arg(palette.bgDark.name())
+                                 .arg(palette.textPrimary.name())
+                                 .arg(palette.borderDark.name()));
+      return spinBox;
+    };
+
+    auto *xSpinBox = createVectorSpinBox("X", x);
+    auto *ySpinBox = createVectorSpinBox("Y", y);
+    auto *zSpinBox = createVectorSpinBox("Z", z);
+
+    vectorLayout->addWidget(xSpinBox);
+    vectorLayout->addWidget(ySpinBox);
+    vectorLayout->addWidget(zSpinBox);
+
+    // Use debounce timer to prevent spamming property updates
+    auto *debounceTimer = new QTimer(vectorWidget);
+    debounceTimer->setSingleShot(true);
+    debounceTimer->setInterval(150);
+
+    auto emitVectorChange = [this, propertyName, xSpinBox, ySpinBox,
+                             zSpinBox]() {
+      QString value = QString("%1,%2,%3")
+                          .arg(xSpinBox->value(), 0, 'f', 3)
+                          .arg(ySpinBox->value(), 0, 'f', 3)
+                          .arg(zSpinBox->value(), 0, 'f', 3);
+      emit propertyValueChanged(propertyName, value);
+    };
+
+    connect(debounceTimer, &QTimer::timeout, this, emitVectorChange);
+
+    connect(xSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [debounceTimer]() { debounceTimer->start(); });
+    connect(ySpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [debounceTimer]() { debounceTimer->start(); });
+    connect(zSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [debounceTimer]() { debounceTimer->start(); });
+
+    editor = vectorWidget;
+    break;
+  }
+
+  case NMPropertyType::Curve: {
+    auto *curveButton = new QPushButton(tr("Edit Curve..."));
+    curveButton->setProperty("propertyName", propertyName);
+    curveButton->setProperty("curveId", currentValue);
+    curveButton->setStyleSheet(QString("QPushButton {"
+                                       "  background-color: %1;"
+                                       "  color: %2;"
+                                       "  border: 1px solid %3;"
+                                       "  border-radius: 3px;"
+                                       "  padding: 4px;"
+                                       "}"
+                                       "QPushButton:hover {"
+                                       "  border-color: %4;"
+                                       "}")
+                                   .arg(palette.bgDark.name())
+                                   .arg(palette.textPrimary.name())
+                                   .arg(palette.borderDark.name())
+                                   .arg(palette.accentPrimary.name()));
+
+    connect(curveButton, &QPushButton::clicked, this,
+            [this, propertyName, curveButton]() {
+              const QString curveId =
+                  curveButton->property("curveId").toString();
+              // Emit signal to request curve editor opening
+              emit propertyValueChanged(
+                  propertyName + ":openCurveEditor", curveId);
+            });
+
+    editor = curveButton;
+    break;
+  }
   }
 
   if (editor) {
