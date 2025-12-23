@@ -152,6 +152,8 @@ std::string toString(const PropertyValue &value) {
           return v.curveId;
         } else if constexpr (std::is_same_v<T, EnumValue>) {
           return v.name;
+        } else if constexpr (std::is_same_v<T, MultipleValues>) {
+          return "<multiple values>";
         } else {
           return "";
         }

@@ -162,9 +162,20 @@ public:
   void setTarget(const InspectorTarget &target);
 
   /**
+   * @brief Set multiple inspection targets (multi-object editing)
+   */
+  void setTargets(const std::vector<InspectorTarget> &targets);
+
+  /**
    * @brief Set target to a scene object
    */
   void inspectSceneObject(const std::string &objectId, void *object);
+
+  /**
+   * @brief Set targets to multiple scene objects (multi-object editing)
+   */
+  void inspectSceneObjects(const std::vector<std::string> &objectIds,
+                           const std::vector<void *> &objects);
 
   /**
    * @brief Set target to a story graph node
@@ -197,6 +208,21 @@ public:
    * @brief Check if there's a valid target
    */
   [[nodiscard]] bool hasTarget() const;
+
+  /**
+   * @brief Get all targets (for multi-object editing)
+   */
+  [[nodiscard]] const std::vector<InspectorTarget> &getTargets() const;
+
+  /**
+   * @brief Check if inspecting multiple targets
+   */
+  [[nodiscard]] bool isMultiEdit() const;
+
+  /**
+   * @brief Get count of targets
+   */
+  [[nodiscard]] size_t getTargetCount() const;
 
   // =========================================================================
   // Property Access
@@ -372,8 +398,11 @@ private:
   void refreshDependentProperties(const std::string &propertyName);
   void publishPropertyChangedEvent(const PropertyChangeContext &context);
 
-  // Current target
+  // Current target (for single-object editing, first element of m_targets)
   InspectorTarget m_target;
+
+  // All targets (for multi-object editing, size > 1 means multi-edit mode)
+  std::vector<InspectorTarget> m_targets;
 
   // Property bindings
   std::unordered_map<std::string, PropertyBinding> m_bindings;

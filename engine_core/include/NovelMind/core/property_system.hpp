@@ -191,11 +191,21 @@ struct EnumValue {
 };
 
 /**
+ * @brief Marker for "multiple values" in multi-object editing
+ * When inspecting multiple objects, if a property has different values across
+ * the objects, this marker is used to indicate "multiple values" in the UI.
+ */
+struct MultipleValues {
+  bool operator==(const MultipleValues &) const { return true; }
+  bool operator!=(const MultipleValues &) const { return false; }
+};
+
+/**
  * @brief Property value variant type
  */
 using PropertyValue =
     std::variant<std::nullptr_t, bool, i32, i64, f32, f64, std::string, Vector2,
-                 Vector3, Color, AssetRef, CurveRef, EnumValue>;
+                 Vector3, Color, AssetRef, CurveRef, EnumValue, MultipleValues>;
 
 /**
  * @brief Property type enumeration
