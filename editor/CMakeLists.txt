@@ -58,6 +58,7 @@ add_library(novelmind_editor STATIC
     # Qt6 GUI implementation
     src/qt/qt_event_bus.cpp
     src/qt/qt_selection_manager.cpp
+    src/qt/navigation_location.cpp
     src/qt/nm_style_manager.cpp
     src/qt/nm_style_manager_stylesheet.cpp
     src/qt/nm_dialogs_detail.cpp
@@ -128,6 +129,7 @@ add_library(novelmind_editor STATIC
     # Qt6 Headers (required for AUTOMOC to work)
     include/NovelMind/editor/qt/qt_event_bus.hpp
     include/NovelMind/editor/qt/qt_selection_manager.hpp
+    include/NovelMind/editor/qt/navigation_location.hpp
     include/NovelMind/editor/qt/nm_style_manager.hpp
     include/NovelMind/editor/qt/nm_dialogs.hpp
     include/NovelMind/editor/qt/nm_main_window.hpp
