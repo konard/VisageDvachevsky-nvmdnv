@@ -34,6 +34,14 @@ void InspectorBindingManager::setTarget(const InspectorTarget &target) {
   }
 
   m_target = target;
+
+  // Single target mode: m_targets contains only one element
+  if (m_target.isValid()) {
+    m_targets = {m_target};
+  } else {
+    m_targets.clear();
+  }
+
   m_cachedValues.clear();
 
   if (m_target.isValid()) {
@@ -49,10 +57,56 @@ void InspectorBindingManager::setTarget(const InspectorTarget &target) {
   notifyTargetChanged();
 }
 
+void InspectorBindingManager::setTargets(
+    const std::vector<InspectorTarget> &targets) {
+  if (m_inBatch) {
+    endPropertyBatch();
+  }
+
+  m_targets = targets;
+  if (!m_targets.empty()) {
+    m_target = m_targets[0]; // Primary target
+  } else {
+    m_target = InspectorTarget();
+  }
+
+  m_cachedValues.clear();
+
+  if (!m_targets.empty()) {
+    // Cache property values (for multi-edit, cache from primary target)
+    auto properties = getProperties();
+    for (const auto *prop : properties) {
+      if (prop) {
+        m_cachedValues[prop->getMeta().name] = prop->getValue(m_target.object);
+      }
+    }
+  }
+
+  notifyTargetChanged();
+}
+
 void InspectorBindingManager::inspectSceneObject(const std::string &objectId,
                                                  void *object) {
   setTarget(
       InspectorTarget(InspectorTargetType::SceneObject, objectId, object));
+}
+
+void InspectorBindingManager::inspectSceneObjects(
+    const std::vector<std::string> &objectIds,
+    const std::vector<void *> &objects) {
+  if (objectIds.size() != objects.size()) {
+    return; // Invalid input
+  }
+
+  std::vector<InspectorTarget> targets;
+  targets.reserve(objectIds.size());
+
+  for (size_t i = 0; i < objectIds.size(); ++i) {
+    targets.emplace_back(InspectorTargetType::SceneObject, objectIds[i],
+                         objects[i]);
+  }
+
+  setTargets(targets);
 }
 
 void InspectorBindingManager::inspectStoryGraphNode(
@@ -80,6 +134,7 @@ void InspectorBindingManager::clearTarget() {
   }
 
   m_target = InspectorTarget();
+  m_targets.clear();
   m_cachedValues.clear();
   notifyTargetChanged();
 }
@@ -89,6 +144,19 @@ const InspectorTarget &InspectorBindingManager::getTarget() const {
 }
 
 bool InspectorBindingManager::hasTarget() const { return m_target.isValid(); }
+
+const std::vector<InspectorTarget> &
+InspectorBindingManager::getTargets() const {
+  return m_targets;
+}
+
+bool InspectorBindingManager::isMultiEdit() const {
+  return m_targets.size() > 1;
+}
+
+size_t InspectorBindingManager::getTargetCount() const {
+  return m_targets.size();
+}
 
 // ============================================================================
 // Property Access
@@ -200,7 +268,24 @@ InspectorBindingManager::getPropertyValue(const std::string &name) const {
     return nullptr;
   }
 
-  return prop->getValue(m_target.object);
+  // Single target mode
+  if (m_targets.size() <= 1) {
+    return prop->getValue(m_target.object);
+  }
+
+  // Multi-edit mode: check if all targets have the same value
+  PropertyValue firstValue = prop->getValue(m_targets[0].object);
+
+  for (size_t i = 1; i < m_targets.size(); ++i) {
+    PropertyValue currentValue = prop->getValue(m_targets[i].object);
+    if (currentValue != firstValue) {
+      // Values differ, return MultipleValues marker
+      return MultipleValues{};
+    }
+  }
+
+  // All values are the same
+  return firstValue;
 }
 
 std::string InspectorBindingManager::getPropertyValueAsString(
@@ -232,7 +317,80 @@ InspectorBindingManager::setPropertyValue(const std::string &name,
     return "Property is read-only";
   }
 
-  // Get old value
+  // Multi-edit mode: apply to all targets
+  if (m_targets.size() > 1) {
+    // Use batch to ensure atomic undo/redo for all changes
+    bool wasInBatch = m_inBatch;
+    if (!wasInBatch) {
+      beginPropertyBatch("Edit " + std::to_string(m_targets.size()) +
+                         " objects");
+    }
+
+    // Apply to all targets
+    for (auto &target : m_targets) {
+      PropertyValue oldValue = prop->getValue(target.object);
+
+      PropertyChangeContext context;
+      context.target = target;
+      context.propertyName = name;
+      context.oldValue = oldValue;
+      context.newValue = value;
+
+      // Validate
+      std::string error;
+      if (!validatePropertyChange(context, error)) {
+        if (!wasInBatch) {
+          endPropertyBatch();
+        }
+        return error;
+      }
+
+      // Notify before change
+      notifyPropertyWillChange(context);
+
+      // Check binding handlers
+      auto bindingIt = m_bindings.find(name);
+      if (bindingIt != m_bindings.end() && bindingIt->second.beforeChange) {
+        if (!bindingIt->second.beforeChange(context)) {
+          if (!wasInBatch) {
+            endPropertyBatch();
+          }
+          return "Change rejected by handler";
+        }
+      }
+
+      // Apply change
+      prop->setValue(target.object, value);
+
+      // Record for batch undo
+      m_batchChanges.push_back(context);
+
+      // Notify after change
+      notifyPropertyDidChange(context);
+
+      // Call after-change handler
+      if (bindingIt != m_bindings.end() && bindingIt->second.afterChange) {
+        bindingIt->second.afterChange(context);
+      }
+
+      // Publish event
+      publishPropertyChangedEvent(context);
+    }
+
+    // Update cache with new value
+    m_cachedValues[name] = value;
+
+    // Refresh dependent properties
+    refreshDependentProperties(name);
+
+    if (!wasInBatch) {
+      endPropertyBatch();
+    }
+
+    return std::nullopt;
+  }
+
+  // Single target mode (original behavior)
   PropertyValue oldValue = prop->getValue(m_target.object);
 
   // Create change context
