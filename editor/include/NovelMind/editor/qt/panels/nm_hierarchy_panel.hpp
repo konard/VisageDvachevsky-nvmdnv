@@ -29,6 +29,9 @@ public:
   void setScene(class NMSceneGraphicsScene *scene);
   [[nodiscard]] class NMSceneGraphicsScene *scene() const { return m_scene; }
 
+  void setSceneViewPanel(class NMSceneViewPanel *panel) { m_sceneViewPanel = panel; }
+  [[nodiscard]] class NMSceneViewPanel *sceneViewPanel() const { return m_sceneViewPanel; }
+
   /**
    * @brief Clear and rebuild the tree
    */
@@ -48,6 +51,7 @@ private slots:
 
 private:
   class NMSceneGraphicsScene *m_scene = nullptr;
+  class NMSceneViewPanel *m_sceneViewPanel = nullptr;
 };
 
 /**

@@ -679,9 +679,14 @@ void NMMainWindow::setupConnections() {
                   }
                   m_sceneViewPanel->scaleObject(targetId, scale.x(), scale.y());
                 } else if (key == "visible") {
-                  const bool visible =
+                  const bool newVisible =
                       (value.toLower() == "true" || value == "1");
-                  m_sceneViewPanel->setObjectVisible(targetId, visible);
+                  const bool oldVisible = obj->isVisible();
+                  if (oldVisible != newVisible) {
+                    auto *cmd = new ToggleObjectVisibilityCommand(
+                        m_sceneViewPanel, targetId, oldVisible, newVisible);
+                    NMUndoManager::instance().pushCommand(cmd);
+                  }
                 } else if (key == "alpha") {
                   m_sceneViewPanel->setObjectOpacity(targetId,
                                                      value.toDouble());
@@ -689,9 +694,14 @@ void NMMainWindow::setupConnections() {
                   m_sceneViewPanel->setObjectZOrder(targetId,
                                                     value.toDouble());
                 } else if (key == "locked") {
-                  const bool locked =
+                  const bool newLocked =
                       (value.toLower() == "true" || value == "1");
-                  m_sceneViewPanel->setObjectLocked(targetId, locked);
+                  const bool oldLocked = obj->isLocked();
+                  if (oldLocked != newLocked) {
+                    auto *cmd = new ToggleObjectLockedCommand(
+                        m_sceneViewPanel, targetId, oldLocked, newLocked);
+                    NMUndoManager::instance().pushCommand(cmd);
+                  }
                 }
               } else if (m_storyGraphPanel->findNodeByIdString(targetId) !=
                          nullptr) {

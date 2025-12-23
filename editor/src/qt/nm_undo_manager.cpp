@@ -328,6 +328,58 @@ bool TransformObjectCommand::mergeWith(const QUndoCommand *other) {
 }
 
 // =============================================================================
+// ToggleObjectVisibilityCommand Implementation
+// =============================================================================
+
+ToggleObjectVisibilityCommand::ToggleObjectVisibilityCommand(
+    NMSceneViewPanel *panel, const QString &objectId, bool oldVisible,
+    bool newVisible, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_objectId(objectId),
+      m_oldVisible(oldVisible), m_newVisible(newVisible) {
+  setText(QString("Toggle Visibility: %1").arg(objectId));
+}
+
+void ToggleObjectVisibilityCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->setObjectVisible(m_objectId, m_oldVisible);
+}
+
+void ToggleObjectVisibilityCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->setObjectVisible(m_objectId, m_newVisible);
+}
+
+// =============================================================================
+// ToggleObjectLockedCommand Implementation
+// =============================================================================
+
+ToggleObjectLockedCommand::ToggleObjectLockedCommand(
+    NMSceneViewPanel *panel, const QString &objectId, bool oldLocked,
+    bool newLocked, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_objectId(objectId),
+      m_oldLocked(oldLocked), m_newLocked(newLocked) {
+  setText(QString("Toggle Locked: %1").arg(objectId));
+}
+
+void ToggleObjectLockedCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->setObjectLocked(m_objectId, m_oldLocked);
+}
+
+void ToggleObjectLockedCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->setObjectLocked(m_objectId, m_newLocked);
+}
+
+// =============================================================================
 // CreateGraphNodeCommand Implementation
 // =============================================================================
 

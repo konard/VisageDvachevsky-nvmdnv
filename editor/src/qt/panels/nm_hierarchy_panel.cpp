@@ -1,6 +1,7 @@
 #include "NovelMind/editor/qt/panels/nm_hierarchy_panel.hpp"
 #include "NovelMind/editor/qt/nm_style_manager.hpp"
 #include "NovelMind/editor/qt/panels/nm_scene_view_panel.hpp"
+#include "NovelMind/editor/qt/nm_undo_manager.hpp"
 
 #include <QAction>
 #include <QHeaderView>
@@ -182,15 +183,53 @@ void NMHierarchyTree::onItemChanged(QTreeWidgetItem *item, int column) {
     return;
   }
 
+  // Skip runtime preview objects
+  const bool isRuntime = objectId.startsWith("runtime_");
+  if (isRuntime) {
+    return;
+  }
+
   if (column == 1) {
-    const bool visible = (item->checkState(1) == Qt::Checked);
-    m_scene->setObjectVisible(objectId, visible);
+    const bool newVisible = (item->checkState(1) == Qt::Checked);
+    auto *obj = m_scene->findSceneObject(objectId);
+    if (!obj) {
+      return;
+    }
+    const bool oldVisible = obj->isVisible();
+    if (oldVisible == newVisible) {
+      return;
+    }
+
+    // Use undo command if scene view panel is available
+    if (m_sceneViewPanel) {
+      auto *cmd = new ToggleObjectVisibilityCommand(m_sceneViewPanel, objectId,
+                                                     oldVisible, newVisible);
+      NMUndoManager::instance().pushCommand(cmd);
+    } else {
+      m_scene->setObjectVisible(objectId, newVisible);
+    }
     return;
   }
 
   if (column == 2) {
-    const bool locked = (item->checkState(2) == Qt::Checked);
-    m_scene->setObjectLocked(objectId, locked);
+    const bool newLocked = (item->checkState(2) == Qt::Checked);
+    auto *obj = m_scene->findSceneObject(objectId);
+    if (!obj) {
+      return;
+    }
+    const bool oldLocked = obj->isLocked();
+    if (oldLocked == newLocked) {
+      return;
+    }
+
+    // Use undo command if scene view panel is available
+    if (m_sceneViewPanel) {
+      auto *cmd = new ToggleObjectLockedCommand(m_sceneViewPanel, objectId,
+                                                oldLocked, newLocked);
+      NMUndoManager::instance().pushCommand(cmd);
+    } else {
+      m_scene->setObjectLocked(objectId, newLocked);
+    }
     return;
   }
 }
@@ -228,6 +267,9 @@ void NMHierarchyPanel::setScene(NMSceneGraphicsScene *scene) {
 
 void NMHierarchyPanel::setSceneViewPanel(NMSceneViewPanel *panel) {
   m_sceneViewPanel = panel;
+  if (m_tree) {
+    m_tree->setSceneViewPanel(panel);
+  }
 }
 
 void NMHierarchyPanel::selectObject(const QString &objectId) {
