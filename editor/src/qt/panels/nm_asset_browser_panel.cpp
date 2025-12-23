@@ -26,6 +26,8 @@
 #include <QPushButton>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <QPainter>
+#include <QRunnable>
 
 namespace NovelMind::editor::qt {
 
@@ -38,6 +40,11 @@ bool isImageExtension(const QString &extension) {
   const QString ext = extension.toLower();
   return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "bmp" ||
          ext == "gif";
+}
+
+bool isAudioExtension(const QString &extension) {
+  const QString ext = extension.toLower();
+  return ext == "wav" || ext == "mp3" || ext == "ogg" || ext == "flac";
 }
 
 class NMAssetFilterProxy final : public QSortFilterProxyModel {
@@ -116,55 +123,91 @@ private:
   int m_typeFilterIndex = 0;
 };
 
+} // namespace
+
 class NMAssetIconProvider : public QFileIconProvider {
 public:
-  explicit NMAssetIconProvider(QSize iconSize, QObject *parent = nullptr)
-      : QFileIconProvider(), m_iconSize(iconSize) {
-    Q_UNUSED(parent);
-  }
+  explicit NMAssetIconProvider(NMAssetBrowserPanel *panel, QSize iconSize)
+      : QFileIconProvider(), m_panel(panel), m_iconSize(iconSize) {}
 
   void setIconSize(const QSize &size) { m_iconSize = size; }
 
   QIcon icon(const QFileInfo &info) const override {
-    if (info.isFile() && isImageExtension(info.suffix())) {
-      const QString cacheKey =
-          QString("nm_asset_thumb_%1_%2x%3")
-              .arg(info.absoluteFilePath())
-              .arg(m_iconSize.width())
-              .arg(m_iconSize.height());
-      QPixmap cached;
-      if (QPixmapCache::find(cacheKey, &cached)) {
-        return QIcon(cached);
+    if (!info.isFile()) {
+      return QFileIconProvider::icon(info);
+    }
+
+    const QString path = info.absoluteFilePath();
+    const QString ext = info.suffix();
+
+    // Check for images
+    if (isImageExtension(ext)) {
+      // Try to get from panel's cache
+      if (m_panel && m_panel->m_thumbnailCache.contains(path)) {
+        auto *entry = m_panel->m_thumbnailCache.object(path);
+        if (entry && m_panel->isThumbnailValid(path, *entry)) {
+          return QIcon(entry->pixmap);
+        }
       }
 
-      QImageReader reader(info.absoluteFilePath());
+      // Load synchronously for now (lazy loading will be added later)
+      QImageReader reader(path);
       reader.setAutoTransform(true);
       QImage image = reader.read();
       if (!image.isNull()) {
         QPixmap pix =
             QPixmap::fromImage(image.scaled(m_iconSize, Qt::KeepAspectRatio,
                                             Qt::SmoothTransformation));
-        QPixmapCache::insert(cacheKey, pix);
+
+        // Cache it
+        if (m_panel) {
+          auto *entry = new ThumbnailCacheEntry{pix, info.lastModified(), info.size()};
+          m_panel->m_thumbnailCache.insert(path, entry,
+                                          static_cast<int>(pix.width() * pix.height() * 4 / 1024));
+        }
         return QIcon(pix);
       }
     }
+
+    // Check for audio files
+    if (isAudioExtension(ext)) {
+      if (m_panel) {
+        QPixmap waveform = m_panel->generateAudioWaveform(path, m_iconSize);
+        if (!waveform.isNull()) {
+          return QIcon(waveform);
+        }
+      }
+    }
+
     return QFileIconProvider::icon(info);
   }
 
 private:
+  QPointer<NMAssetBrowserPanel> m_panel;
   QSize m_iconSize;
 };
-
-} // namespace
 
 NMAssetBrowserPanel::NMAssetBrowserPanel(QWidget *parent)
     : NMDockPanel(tr("Asset Browser"), parent) {
   setPanelId("AssetBrowser");
+
+  // Initialize thumbnail cache (max 50MB)
+  m_thumbnailCache.setMaxCost(50 * 1024);
+
+  // Initialize thread pool for background loading
+  m_thumbnailThreadPool = new QThreadPool(this);
+  m_thumbnailThreadPool->setMaxThreadCount(2);
+
   setupContent();
   setupToolBar();
 }
 
-NMAssetBrowserPanel::~NMAssetBrowserPanel() = default;
+NMAssetBrowserPanel::~NMAssetBrowserPanel() {
+  cancelPendingThumbnails();
+  if (m_thumbnailThreadPool) {
+    m_thumbnailThreadPool->waitForDone(1000);
+  }
+}
 
 void NMAssetBrowserPanel::onInitialize() {
   auto &projectManager = ProjectManager::instance();
@@ -292,6 +335,18 @@ void NMAssetBrowserPanel::setupToolBar() {
 
   m_toolBar->addSeparator();
 
+  // View mode toggle
+  m_viewModeCombo = new QComboBox(this);
+  m_viewModeCombo->addItem(tr("Grid"), static_cast<int>(AssetViewMode::Grid));
+  m_viewModeCombo->addItem(tr("List"), static_cast<int>(AssetViewMode::List));
+  m_viewModeCombo->setCurrentIndex(0);
+  m_viewModeCombo->setToolTip(tr("Toggle between grid and list view"));
+  connect(m_viewModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &NMAssetBrowserPanel::onViewModeChanged);
+  m_toolBar->addWidget(m_viewModeCombo);
+
+  m_toolBar->addSeparator();
+
   QAction *actionImport = m_toolBar->addAction(tr("Import"));
   actionImport->setToolTip(tr("Import Assets"));
   connect(actionImport, &QAction::triggered, this,
@@ -402,7 +457,7 @@ void NMAssetBrowserPanel::setupContent() {
   setContentWidget(m_contentWidget);
   applyFilters();
 
-  m_iconProvider = new NMAssetIconProvider(m_listView->iconSize(), this);
+  m_iconProvider = new NMAssetIconProvider(this, m_listView->iconSize());
   m_listModel->setIconProvider(m_iconProvider);
   m_listModel->setObjectName("AssetBrowserListModel");
   m_treeModel->setObjectName("AssetBrowserTreeModel");
@@ -944,6 +999,138 @@ QString NMAssetBrowserPanel::generateUniquePath(const QString &directory,
   }
 
   return candidate;
+}
+
+QPixmap NMAssetBrowserPanel::generateAudioWaveform(const QString &path,
+                                                   const QSize &size) const {
+  Q_UNUSED(path);
+
+  // Create a deterministic placeholder waveform
+  QPixmap pixmap(size);
+  pixmap.fill(Qt::transparent);
+
+  QPainter painter(&pixmap);
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  // Background
+  QColor bgColor(60, 60, 80);
+  painter.fillRect(pixmap.rect(), bgColor);
+
+  // Border
+  painter.setPen(QPen(QColor(100, 100, 120), 1));
+  painter.drawRect(pixmap.rect().adjusted(0, 0, -1, -1));
+
+  // Draw "AUDIO" text
+  painter.setPen(QColor(200, 200, 220));
+  QFont font = painter.font();
+  font.setPointSize(size.height() / 6);
+  font.setBold(true);
+  painter.setFont(font);
+  painter.drawText(pixmap.rect(), Qt::AlignCenter, "AUDIO");
+
+  // Draw deterministic waveform bars
+  const int barCount = 16;
+  const int barWidth = (size.width() - 20) / barCount;
+  const int maxBarHeight = size.height() - 30;
+
+  // Use file path hash for deterministic heights
+  QByteArray pathData = path.toUtf8();
+  uint seed = static_cast<uint>(qHash(pathData));
+
+  painter.setPen(Qt::NoPen);
+  painter.setBrush(QColor(120, 200, 255, 180));
+
+  for (int i = 0; i < barCount; ++i) {
+    // Generate deterministic height based on position and seed
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    const double normalized = static_cast<double>(seed % 1000) / 1000.0;
+    const int barHeight = static_cast<int>(maxBarHeight * normalized * 0.8 + maxBarHeight * 0.2);
+
+    const int x = 10 + i * barWidth;
+    const int y = (size.height() - barHeight) / 2;
+
+    painter.drawRect(x, y, barWidth - 2, barHeight);
+  }
+
+  return pixmap;
+}
+
+bool NMAssetBrowserPanel::isThumbnailValid(
+    const QString &path, const ThumbnailCacheEntry &entry) const {
+  QFileInfo info(path);
+  if (!info.exists()) {
+    return false;
+  }
+
+  // Check if file has been modified
+  if (info.lastModified() != entry.lastModified) {
+    return false;
+  }
+
+  // Check if file size has changed
+  if (info.size() != entry.fileSize) {
+    return false;
+  }
+
+  return true;
+}
+
+void NMAssetBrowserPanel::scheduleVisibleThumbnails() {
+  // TODO: Implement lazy loading for visible items only
+  // This would iterate through visible items in the list view
+  // and schedule background loading tasks
+}
+
+void NMAssetBrowserPanel::cancelPendingThumbnails() {
+  m_pendingThumbnails.clear();
+  // Note: QThreadPool doesn't support cancellation of running tasks
+  // We rely on QPointer checks in the runnable to abort gracefully
+}
+
+void NMAssetBrowserPanel::onViewModeChanged(int index) {
+  if (!m_viewModeCombo || !m_listView) {
+    return;
+  }
+
+  const auto mode =
+      static_cast<AssetViewMode>(m_viewModeCombo->itemData(index).toInt());
+  setViewMode(mode);
+}
+
+void NMAssetBrowserPanel::setViewMode(AssetViewMode mode) {
+  m_viewMode = mode;
+
+  if (!m_listView) {
+    return;
+  }
+
+  switch (mode) {
+  case AssetViewMode::Grid:
+    m_listView->setViewMode(QListView::IconMode);
+    m_listView->setIconSize(QSize(m_thumbSize, m_thumbSize));
+    m_listView->setGridSize(QSize(m_thumbSize + 28, m_thumbSize + 32));
+    m_listView->setSpacing(6);
+    break;
+
+  case AssetViewMode::List:
+    m_listView->setViewMode(QListView::ListMode);
+    m_listView->setIconSize(QSize(24, 24));
+    m_listView->setGridSize(QSize());
+    m_listView->setSpacing(2);
+    break;
+  }
+
+  m_listView->update();
+}
+
+void NMAssetBrowserPanel::onThumbnailReady(const QString &path,
+                                           const QPixmap &pixmap) {
+  m_pendingThumbnails.remove(path);
+
+  if (!pixmap.isNull() && m_listView) {
+    // Force model to refresh the icon for this item
+    m_listView->update();
+  }
 }
 
 } // namespace NovelMind::editor::qt
