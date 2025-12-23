@@ -2,10 +2,12 @@
 #include "NovelMind/editor/qt/panels/nm_keyframe_item.hpp"
 #include "NovelMind/editor/qt/nm_icon_manager.hpp"
 #include "NovelMind/editor/qt/nm_undo_manager.hpp"
+#include "NovelMind/editor/qt/performance_metrics.hpp"
 
 #include <QBrush>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QElapsedTimer>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
@@ -132,7 +134,15 @@ void TimelineTrack::clearSelection() {
 // =============================================================================
 
 NMTimelinePanel::NMTimelinePanel(QWidget *parent)
-    : NMDockPanel("Timeline", parent) {}
+    : NMDockPanel("Timeline", parent) {
+  // Initialize render cache with proper config
+  TimelineRenderCacheConfig cacheConfig;
+  cacheConfig.maxMemoryBytes = 32 * 1024 * 1024;  // 32 MB
+  cacheConfig.tileWidth = 256;
+  cacheConfig.tileHeight = TRACK_HEIGHT;
+  cacheConfig.enableCache = true;
+  m_renderCache = std::make_unique<TimelineRenderCache>(cacheConfig, this);
+}
 
 NMTimelinePanel::~NMTimelinePanel() = default;
 
@@ -444,6 +454,9 @@ void NMTimelinePanel::updateFrameDisplay() {
 }
 
 void NMTimelinePanel::renderTracks() {
+  QElapsedTimer timer;
+  timer.start();
+
   // Clear existing track visualization (except playhead)
   QList<QGraphicsItem *> items = m_timelineScene->items();
   for (QGraphicsItem *item : items) {
@@ -536,6 +549,11 @@ void NMTimelinePanel::renderTracks() {
                                 y + TIMELINE_MARGIN);
 
   updatePlayhead();
+
+  // Record performance metrics
+  double renderTimeMs = timer.elapsed();
+  int itemCount = m_timelineScene->items().count();
+  recordRenderMetrics(renderTimeMs, itemCount);
 }
 
 int NMTimelinePanel::frameToX(int frame) const {
@@ -812,6 +830,43 @@ TimelineTrack* NMTimelinePanel::getTrack(const QString& name) const {
     return it.value();
   }
   return nullptr;
+}
+
+// =============================================================================
+// Render Cache and Performance Metrics
+// =============================================================================
+
+void NMTimelinePanel::invalidateRenderCache() {
+  m_dataVersion.fetch_add(1);
+  if (m_renderCache) {
+    m_renderCache->invalidateAll();
+  }
+}
+
+void NMTimelinePanel::invalidateTrackCache(int trackIndex) {
+  m_dataVersion.fetch_add(1);
+  if (m_renderCache) {
+    m_renderCache->invalidateTrack(trackIndex);
+  }
+}
+
+void NMTimelinePanel::recordRenderMetrics(double renderTimeMs, int itemCount) {
+  m_lastRenderTimeMs = renderTimeMs;
+  m_lastSceneItemCount = itemCount;
+
+  // Record to performance metrics system
+  PerformanceMetrics::instance().recordTiming(
+      PerformanceMetrics::METRIC_RENDER_TRACKS, renderTimeMs);
+  PerformanceMetrics::instance().recordCount(
+      PerformanceMetrics::METRIC_SCENE_ITEMS, itemCount);
+
+  // Report cache stats if enabled
+  if (m_renderCache) {
+    auto stats = m_renderCache->getStats();
+    PerformanceMetrics::instance().recordCount(
+        PerformanceMetrics::METRIC_TIMELINE_CACHE_HIT,
+        static_cast<int>(stats.hitRate() * 100));
+  }
 }
 
 } // namespace NovelMind::editor::qt
