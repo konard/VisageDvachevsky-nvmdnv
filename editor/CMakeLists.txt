@@ -111,6 +111,7 @@ add_library(novelmind_editor STATIC
     src/qt/panels/nm_timeline_panel.cpp
     src/qt/panels/nm_keyframe_item.cpp
     src/qt/panels/nm_curve_editor_panel.cpp
+    src/qt/panels/nm_curve_point_item.cpp
     src/qt/panels/nm_voice_manager_panel.cpp
     src/qt/panels/nm_localization_panel.cpp
     src/qt/panels/nm_diagnostics_panel.cpp
@@ -149,6 +150,7 @@ add_library(novelmind_editor STATIC
     include/NovelMind/editor/qt/panels/nm_timeline_panel.hpp
     include/NovelMind/editor/qt/panels/nm_keyframe_item.hpp
     include/NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp
+    include/NovelMind/editor/qt/panels/nm_curve_point_item.hpp
     include/NovelMind/editor/qt/panels/nm_voice_manager_panel.hpp
     include/NovelMind/editor/qt/panels/nm_localization_panel.hpp
     include/NovelMind/editor/qt/panels/nm_diagnostics_panel.hpp

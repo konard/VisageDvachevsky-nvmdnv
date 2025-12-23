@@ -550,7 +550,7 @@ bool NMVoiceManagerPanel::exportToCsv(const QString &filePath) {
     out << "\"" << entry.scriptPath << "\",";
     out << entry.lineNumber << ",";
     out << "\"" << entry.speaker << "\",";
-    out << "\"" << entry.dialogueText.replace("\"", "\"\"") << "\",";
+    out << "\"" << QString(entry.dialogueText).replace("\"", "\"\"") << "\",";
     out << "\"" << QFileInfo(entry.voiceFilePath).fileName() << "\",";
     out << "\"" << entry.actor << "\",";
     out << (entry.isMatched ? (entry.isVerified ? "Verified" : "Matched") : "Missing") << "\n";
