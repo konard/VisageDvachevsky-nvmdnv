@@ -74,6 +74,8 @@ add_library(engine_core STATIC
     src/scene/scene_object_choice.cpp
     src/scene/scene_object_effect.cpp
     src/scene/scene_inspector.cpp
+    src/scene/scene_object_properties.cpp
+    src/scene/scene_object_handle.cpp
 
     # Input
     src/input/input_manager.cpp
