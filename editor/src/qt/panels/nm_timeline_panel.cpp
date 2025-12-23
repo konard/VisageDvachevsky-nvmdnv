@@ -1,6 +1,7 @@
 #include "NovelMind/editor/qt/panels/nm_timeline_panel.hpp"
 #include "NovelMind/editor/qt/panels/nm_keyframe_item.hpp"
 #include "NovelMind/editor/qt/nm_icon_manager.hpp"
+#include "NovelMind/editor/qt/nm_undo_manager.hpp"
 
 #include <QBrush>
 #include <QDialog>
@@ -384,7 +385,20 @@ void NMTimelinePanel::addKeyframeAtCurrent(const QString &trackName,
   if (!m_tracks.contains(trackName))
     return;
 
-  m_tracks[trackName]->addKeyframe(m_currentFrame, value);
+  // Create snapshot for undo
+  KeyframeSnapshot snapshot;
+  snapshot.frame = m_currentFrame;
+  snapshot.value = value;
+  snapshot.easingType = static_cast<int>(EasingType::Linear);
+  snapshot.handleInX = 0.0f;
+  snapshot.handleInY = 0.0f;
+  snapshot.handleOutX = 0.0f;
+  snapshot.handleOutY = 0.0f;
+
+  // Create and push add command
+  auto *cmd = new AddKeyframeCommand(this, trackName, snapshot);
+  NMUndoManager::instance().pushCommand(cmd);
+
   renderTracks();
 
   emit keyframeModified(trackName, m_currentFrame);
@@ -605,8 +619,9 @@ void NMTimelinePanel::onKeyframeMoved(int oldFrame, int newFrame,
   if (!targetTrack)
     return;
 
-  // Move keyframe in data model
-  targetTrack->moveKeyframe(oldFrame, newFrame);
+  // Create and push move command
+  auto *cmd = new TimelineKeyframeMoveCommand(this, targetTrack->name, oldFrame, newFrame);
+  NMUndoManager::instance().pushCommand(cmd);
 
   // Update selection to new position
   KeyframeId oldId;
@@ -625,7 +640,7 @@ void NMTimelinePanel::onKeyframeMoved(int oldFrame, int newFrame,
   // Re-render to update positions
   renderTracks();
 
-  emit keyframeMoved(QString::number(trackIndex), oldFrame, newFrame);
+  emit keyframeMoved(targetTrack->name, oldFrame, newFrame);
 }
 
 void NMTimelinePanel::onKeyframeDoubleClicked(int trackIndex, int frame) {
@@ -693,9 +708,18 @@ void NMTimelinePanel::showEasingDialog(int trackIndex, int frame) {
     int selectedIndex = easingList->currentRow();
     if (selectedIndex >= 0 &&
         selectedIndex < static_cast<int>(EasingType::Custom) + 1) {
-      targetKeyframe->easing = static_cast<EasingType>(selectedIndex);
+      // Create undo command for easing change
+      int oldEasing = static_cast<int>(targetKeyframe->easing);
+      int newEasing = selectedIndex;
+
+      if (oldEasing != newEasing) {
+        auto *cmd = new ChangeKeyframeEasingCommand(
+            this, targetTrack->name, frame, oldEasing, newEasing);
+        NMUndoManager::instance().pushCommand(cmd);
+      }
+
       emit keyframeEasingChanged(targetTrack->name, frame,
-                                  targetKeyframe->easing);
+                                  static_cast<EasingType>(newEasing));
     }
   }
 }
@@ -707,6 +731,11 @@ void NMTimelinePanel::showEasingDialog(int trackIndex, int frame) {
 void NMTimelinePanel::deleteSelectedKeyframes() {
   if (m_selectedKeyframes.isEmpty())
     return;
+
+  // Create macro command for deleting multiple keyframes
+  if (m_selectedKeyframes.size() > 1) {
+    NMUndoManager::instance().beginMacro("Delete Keyframes");
+  }
 
   // Delete keyframes from data model
   int trackIndex = 0;
@@ -722,11 +751,30 @@ void NMTimelinePanel::deleteSelectedKeyframes() {
       }
     }
 
-    // Delete the keyframes
+    // Delete the keyframes with undo support
     for (int frame : framesToDelete) {
-      track->removeKeyframe(frame);
-      emit keyframeDeleted(track->name, frame);
+      // Capture keyframe state before deleting
+      if (auto *kf = track->getKeyframe(frame)) {
+        KeyframeSnapshot snapshot;
+        snapshot.frame = frame;
+        snapshot.value = kf->value;
+        snapshot.easingType = static_cast<int>(kf->easing);
+        snapshot.handleInX = kf->handleInX;
+        snapshot.handleInY = kf->handleInY;
+        snapshot.handleOutX = kf->handleOutX;
+        snapshot.handleOutY = kf->handleOutY;
+
+        // Create and push delete command
+        auto *cmd = new DeleteKeyframeCommand(this, track->name, snapshot);
+        NMUndoManager::instance().pushCommand(cmd);
+
+        emit keyframeDeleted(track->name, frame);
+      }
     }
+  }
+
+  if (m_selectedKeyframes.size() > 1) {
+    NMUndoManager::instance().endMacro();
   }
 
   // Clear selection
