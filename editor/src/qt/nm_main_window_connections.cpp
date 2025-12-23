@@ -838,6 +838,41 @@ void NMMainWindow::setupConnections() {
             m_inspectorPanel->updatePropertyValue(
                 "scale_y", QString::number(newScaleY));
           });
+
+  // Connect Inspector Curve property to Curve Editor panel
+  // When user clicks "Edit Curve..." button in Inspector, open Curve Editor
+  connect(m_inspectorPanel, &NMInspectorPanel::propertyChanged, this,
+          [this](const QString &objectId, const QString &propertyName,
+                 const QString &newValue) {
+            Q_UNUSED(objectId);
+            // Check if this is a curve editor open request
+            if (propertyName.endsWith(":openCurveEditor")) {
+              // Extract the actual property name
+              QString actualPropertyName =
+                  propertyName.left(propertyName.length() -
+                                    QString(":openCurveEditor").length());
+              Q_UNUSED(actualPropertyName);
+
+              // Show and raise the curve editor panel
+              if (m_curveEditorPanel) {
+                m_curveEditorPanel->setCurve(newValue);
+                m_curveEditorPanel->show();
+                m_curveEditorPanel->raise();
+                m_curveEditorPanel->setFocus();
+              }
+            }
+          });
+
+  // Connect Curve Editor changes back to notify when curve data changes
+  if (m_curveEditorPanel) {
+    connect(m_curveEditorPanel, &NMCurveEditorPanel::curveChanged, this,
+            [](const QString &curveId) {
+              Q_UNUSED(curveId);
+              // Could update timeline or other panels that use curves
+              // Curve editing triggers document modification tracking
+              // through the undo system when connected to property changes
+            });
+  }
 }
 
 } // namespace NovelMind::editor::qt
