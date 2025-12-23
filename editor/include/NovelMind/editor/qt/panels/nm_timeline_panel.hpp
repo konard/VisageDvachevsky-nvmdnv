@@ -282,6 +282,21 @@ public slots:
   void setGridSize(int frames);
   [[nodiscard]] int gridSize() const { return m_gridSize; }
 
+  /**
+   * @brief Get track by name
+   */
+  [[nodiscard]] TimelineTrack* getTrack(const QString& name) const;
+
+  /**
+   * @brief Get all tracks
+   */
+  [[nodiscard]] const QMap<QString, TimelineTrack*>& getTracks() const { return m_tracks; }
+
+  /**
+   * @brief Get current FPS
+   */
+  [[nodiscard]] int getFPS() const { return m_fps; }
+
 private:
   void setupUI();
   void setupToolbar();
