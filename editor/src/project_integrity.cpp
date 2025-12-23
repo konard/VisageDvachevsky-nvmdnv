@@ -477,7 +477,7 @@ void ProjectIntegrityChecker::collectAssetReferences() {
   // Scan scene files for asset references
   fs::path scenesDir = fs::path(m_projectPath) / "Scenes";
   if (fs::exists(scenesDir)) {
-    std::regex assetRefPattern(R"("(?:textureId|imageId|audioId|fontId)":\s*"([^"]+)")");
+    std::regex assetRefPattern(R"(\"(?:textureId|imageId|audioId|fontId)\":\s*\"([^\"]+)\")");
 
     for (const auto &entry : fs::recursive_directory_iterator(scenesDir)) {
       if (entry.path().extension() == ".nmscene" ||
@@ -501,7 +501,7 @@ void ProjectIntegrityChecker::collectAssetReferences() {
   // Scan script files for asset references
   fs::path scriptsDir = fs::path(m_projectPath) / "Scripts";
   if (fs::exists(scriptsDir)) {
-    std::regex assetRefPattern(R"(show\s+(?:background|character)\s+"([^"]+)")");
+    std::regex assetRefPattern(R"(show\s+(?:background|character)\s+\"([^\"]+)\")");
 
     for (const auto &entry : fs::recursive_directory_iterator(scriptsDir)) {
       if (entry.path().extension() == ".nms") {
@@ -596,7 +596,7 @@ void ProjectIntegrityChecker::checkVoiceLines(
   // Check script files for voice references
   fs::path scriptsDir = fs::path(m_projectPath) / "Scripts";
   if (fs::exists(scriptsDir)) {
-    std::regex voiceRefPattern(R"(voice\s+"([^"]+)")");
+    std::regex voiceRefPattern(R"(voice\s+\"([^\"]+)\")");
 
     for (const auto &entry : fs::recursive_directory_iterator(scriptsDir)) {
       if (entry.path().extension() == ".nms") {
@@ -636,7 +636,7 @@ void ProjectIntegrityChecker::scanLocalizationFiles() {
     return;
   }
 
-  std::regex keyPattern(R"("([^"]+)":\s*"[^"]*")");
+  std::regex keyPattern(R"(\"([^\"]+)\":\s*\"[^\"]*\")");
 
   for (const auto &entry : fs::directory_iterator(locDir)) {
     if (entry.path().extension() == ".json") {

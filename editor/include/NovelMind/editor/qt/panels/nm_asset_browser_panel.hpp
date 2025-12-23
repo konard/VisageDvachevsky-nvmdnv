@@ -30,8 +30,22 @@
 #include <QAction>
 #include <QHash>
 #include <QUndoStack>
+#include <QCache>
+#include <QDateTime>
+#include <QThreadPool>
+#include <QPointer>
+#include <QRunnable>
 
 namespace NovelMind::editor::qt {
+
+/**
+ * @brief Cached thumbnail entry with metadata for invalidation
+ */
+struct ThumbnailCacheEntry {
+  QPixmap pixmap;
+  QDateTime lastModified;
+  qint64 fileSize = 0;
+};
 
 /**
  * @brief Asset metadata from database
@@ -157,6 +171,7 @@ private slots:
   void onShowInExplorerAction();
   void onCopyPathAction();
   void onCopyIdAction();
+  void onThumbnailReady(const QString &path, const QPixmap &pixmap);
 
 private:
   void setupToolBar();
@@ -170,7 +185,17 @@ private:
   QString importDestinationForExtension(const QString &extension) const;
   QString generateUniquePath(const QString &directory,
                              const QString &fileName) const;
+  void scheduleVisibleThumbnails();
+  void cancelPendingThumbnails();
 
+public: // Used by NMAssetIconProvider
+  QPixmap generateAudioWaveform(const QString &path, const QSize &size) const;
+  bool isThumbnailValid(const QString &path, const ThumbnailCacheEntry &entry) const;
+
+  // Thumbnail cache with LRU eviction (max size in KB)
+  QCache<QString, ThumbnailCacheEntry> m_thumbnailCache;
+
+private:
   QSplitter *m_splitter = nullptr;
   QTreeView *m_treeView = nullptr;
   QListView *m_listView = nullptr;
@@ -223,6 +248,12 @@ private:
 
   // Audio waveform display
   QLabel *m_waveformLabel = nullptr;
+
+  // Thread pool for background thumbnail loading
+  QPointer<QThreadPool> m_thumbnailThreadPool;
+
+  // Pending thumbnail requests (for cancellation)
+  QSet<QString> m_pendingThumbnails;
 };
 
 } // namespace NovelMind::editor::qt
