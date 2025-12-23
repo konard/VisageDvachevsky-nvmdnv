@@ -1,5 +1,9 @@
 # Обзор архитектуры
 
+> **См. также**: [gui_architecture.md](gui_architecture.md) — архитектура GUI редактора.
+> **См. также**: [core_runtime_spec.md](core_runtime_spec.md) — API спецификация ядра runtime.
+> **См. также**: [editor_engine_interaction.md](editor_engine_interaction.md) — протоколы взаимодействия.
+
 Этот документ описывает архитектуру движка NovelMind и его компонентов на высоком уровне.
 
 ## Компоненты системы
