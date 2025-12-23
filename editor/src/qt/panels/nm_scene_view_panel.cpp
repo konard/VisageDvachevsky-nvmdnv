@@ -87,5 +87,28 @@ void NMSceneViewPanel::setGizmoMode(NMTransformGizmo::GizmoMode mode) {
   }
 }
 
+void NMSceneViewPanel::setAnimationPreviewMode(bool enabled) {
+  if (m_animationPreviewMode == enabled) {
+    return;
+  }
+
+  m_animationPreviewMode = enabled;
+
+  if (enabled) {
+    qDebug() << "[SceneView] Animation preview mode enabled";
+    // Disable editing during preview
+    if (m_scene) {
+      // Could disable gizmos, etc.
+    }
+  } else {
+    qDebug() << "[SceneView] Animation preview mode disabled";
+    // Re-enable editing
+  }
+
+  // Request redraw
+  if (m_view) {
+    m_view->viewport()->update();
+  }
+}
 
 } // namespace NovelMind::editor::qt

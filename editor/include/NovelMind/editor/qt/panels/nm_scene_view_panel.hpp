@@ -372,6 +372,16 @@ public:
                        const QStringList &choices);
   void clearStoryPreview();
 
+  /**
+   * @brief Enable/disable animation preview mode
+   */
+  void setAnimationPreviewMode(bool enabled);
+
+  /**
+   * @brief Check if animation preview mode is active
+   */
+  [[nodiscard]] bool isAnimationPreviewMode() const { return m_animationPreviewMode; }
+
 signals:
   void objectSelected(const QString &objectId);
   void objectDoubleClicked(const QString &objectId);
@@ -489,6 +499,7 @@ private:
   QString m_editorPreviewSpeaker;
   QString m_editorPreviewText;
   QStringList m_editorPreviewChoices;
+  bool m_animationPreviewMode = false;
 };
 
 } // namespace NovelMind::editor::qt

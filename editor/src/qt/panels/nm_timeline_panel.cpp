@@ -754,4 +754,16 @@ bool NMTimelinePanel::eventFilter(QObject *obj, QEvent *event) {
   return NMDockPanel::eventFilter(obj, event);
 }
 
+// =============================================================================
+// Track Access Methods
+// =============================================================================
+
+TimelineTrack* NMTimelinePanel::getTrack(const QString& name) const {
+  auto it = m_tracks.find(name);
+  if (it != m_tracks.end()) {
+    return it.value();
+  }
+  return nullptr;
+}
+
 } // namespace NovelMind::editor::qt
