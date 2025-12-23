@@ -2,10 +2,12 @@
 #include "NovelMind/editor/qt/nm_play_mode_controller.hpp"
 #include "NovelMind/editor/qt/nm_undo_manager.hpp"
 #include "NovelMind/editor/project_manager.hpp"
+#include "NovelMind/editor/error_reporter.hpp"
 
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QMessageBox>
 #include <QSet>
 #include <QTextStream>
 
@@ -319,6 +321,28 @@ void NMStoryGraphPanel::onRequestConnection(uint64_t fromNodeId,
     return;
 
   if (m_scene->hasConnection(fromNodeId, toNodeId)) {
+    return;
+  }
+
+  // Check if this connection would create a cycle
+  if (m_scene->wouldCreateCycle(fromNodeId, toNodeId)) {
+    auto *fromNode = findNodeById(fromNodeId);
+    auto *toNode = findNodeById(toNodeId);
+
+    QString fromName = fromNode ? fromNode->title() : QString::number(fromNodeId);
+    QString toName = toNode ? toNode->title() : QString::number(toNodeId);
+
+    QString message = tr("Cannot create connection: Adding connection from '%1' to '%2' would create a cycle in the graph.")
+                        .arg(fromName, toName);
+
+    // Report to diagnostics system
+    ErrorReporter::instance().reportGraphError(
+      message.toStdString(),
+      QString("Connection: %1 -> %2").arg(fromName, toName).toStdString()
+    );
+
+    // Show user feedback
+    QMessageBox::warning(this, tr("Cycle Detected"), message);
     return;
   }
 

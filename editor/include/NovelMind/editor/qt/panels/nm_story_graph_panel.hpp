@@ -22,6 +22,8 @@
 
 namespace NovelMind::editor::qt {
 
+class NMStoryGraphMinimap;
+
 struct GraphNodeMove {
   uint64_t nodeId = 0;
   QPointF oldPos;
@@ -344,6 +346,7 @@ public:
 
   [[nodiscard]] NMStoryGraphScene *graphScene() const { return m_scene; }
   [[nodiscard]] NMStoryGraphView *graphView() const { return m_view; }
+  [[nodiscard]] NMStoryGraphMinimap *minimap() const { return m_minimap; }
   [[nodiscard]] NMGraphNodeItem *findNodeById(uint64_t nodeId) const;
 
   /**
@@ -394,6 +397,7 @@ private:
 
   NMStoryGraphScene *m_scene = nullptr;
   NMStoryGraphView *m_view = nullptr;
+  NMStoryGraphMinimap *m_minimap = nullptr;
   QWidget *m_contentWidget = nullptr;
   QToolBar *m_toolBar = nullptr;
   NMNodePalette *m_nodePalette = nullptr;
