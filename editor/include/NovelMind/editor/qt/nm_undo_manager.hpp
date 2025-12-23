@@ -380,4 +380,274 @@ private:
   QVector<GraphNodeMove> m_moves;
 };
 
+// =============================================================================
+// Timeline Commands
+// =============================================================================
+
+// Forward declarations
+class NMTimelinePanel;
+struct Keyframe;
+
+/**
+ * @brief Snapshot of a keyframe's state
+ */
+struct KeyframeSnapshot {
+  int frame = 0;
+  QVariant value;
+  int easingType = 0; // EasingType as int
+  float handleInX = 0.0f;
+  float handleInY = 0.0f;
+  float handleOutX = 0.0f;
+  float handleOutY = 0.0f;
+};
+
+/**
+ * @brief Command for moving a keyframe
+ */
+class TimelineKeyframeMoveCommand : public QUndoCommand {
+public:
+  TimelineKeyframeMoveCommand(NMTimelinePanel *panel, const QString &trackName,
+                              int oldFrame, int newFrame,
+                              QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+  bool mergeWith(const QUndoCommand *other) override;
+  int id() const override { return 3; }
+
+private:
+  QPointer<NMTimelinePanel> m_panel;
+  QString m_trackName;
+  int m_oldFrame = 0;
+  int m_newFrame = 0;
+};
+
+/**
+ * @brief Command for adding a keyframe
+ */
+class AddKeyframeCommand : public QUndoCommand {
+public:
+  AddKeyframeCommand(NMTimelinePanel *panel, const QString &trackName,
+                     const KeyframeSnapshot &snapshot,
+                     QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMTimelinePanel> m_panel;
+  QString m_trackName;
+  KeyframeSnapshot m_snapshot;
+};
+
+/**
+ * @brief Command for deleting a keyframe
+ */
+class DeleteKeyframeCommand : public QUndoCommand {
+public:
+  DeleteKeyframeCommand(NMTimelinePanel *panel, const QString &trackName,
+                        const KeyframeSnapshot &snapshot,
+                        QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMTimelinePanel> m_panel;
+  QString m_trackName;
+  KeyframeSnapshot m_snapshot;
+};
+
+/**
+ * @brief Command for changing keyframe easing
+ */
+class ChangeKeyframeEasingCommand : public QUndoCommand {
+public:
+  ChangeKeyframeEasingCommand(NMTimelinePanel *panel, const QString &trackName,
+                              int frame, int oldEasing, int newEasing,
+                              QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMTimelinePanel> m_panel;
+  QString m_trackName;
+  int m_frame = 0;
+  int m_oldEasing = 0;
+  int m_newEasing = 0;
+};
+
+// =============================================================================
+// Localization Commands
+// =============================================================================
+
+// Forward declarations
+class NMLocalizationPanel;
+
+/**
+ * @brief Command for adding a localization key
+ */
+class AddLocalizationKeyCommand : public QUndoCommand {
+public:
+  AddLocalizationKeyCommand(NMLocalizationPanel *panel, const QString &key,
+                            const QString &defaultValue,
+                            QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMLocalizationPanel> m_panel;
+  QString m_key;
+  QString m_defaultValue;
+  bool m_firstRedo = true;
+};
+
+/**
+ * @brief Command for deleting a localization key
+ */
+class DeleteLocalizationKeyCommand : public QUndoCommand {
+public:
+  DeleteLocalizationKeyCommand(NMLocalizationPanel *panel, const QString &key,
+                               const QHash<QString, QString> &translations,
+                               QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMLocalizationPanel> m_panel;
+  QString m_key;
+  QHash<QString, QString> m_translations; // locale -> translation
+};
+
+/**
+ * @brief Command for changing a translation value
+ */
+class ChangeTranslationCommand : public QUndoCommand {
+public:
+  ChangeTranslationCommand(NMLocalizationPanel *panel, const QString &key,
+                           const QString &locale, const QString &oldValue,
+                           const QString &newValue,
+                           QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMLocalizationPanel> m_panel;
+  QString m_key;
+  QString m_locale;
+  QString m_oldValue;
+  QString m_newValue;
+};
+
+// =============================================================================
+// Curve Editor Commands
+// =============================================================================
+
+// Forward declarations
+class NMCurveEditorPanel;
+class CurveData;
+using CurvePointId = uint64_t;
+
+/**
+ * @brief Snapshot of a curve point's state
+ */
+struct CurvePointSnapshot {
+  CurvePointId id = 0;
+  qreal time = 0.0;
+  qreal value = 0.0;
+  int interpolation = 0; // CurveInterpolation as int
+};
+
+/**
+ * @brief Command for adding a curve point
+ */
+class AddCurvePointCommand : public QUndoCommand {
+public:
+  AddCurvePointCommand(NMCurveEditorPanel *panel, CurvePointId pointId,
+                       qreal time, qreal value, int interpolation = 0,
+                       QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMCurveEditorPanel> m_panel;
+  CurvePointSnapshot m_snapshot;
+  bool m_firstRedo = true;
+};
+
+/**
+ * @brief Command for deleting a curve point
+ */
+class DeleteCurvePointCommand : public QUndoCommand {
+public:
+  DeleteCurvePointCommand(NMCurveEditorPanel *panel,
+                          const CurvePointSnapshot &snapshot,
+                          QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMCurveEditorPanel> m_panel;
+  CurvePointSnapshot m_snapshot;
+};
+
+/**
+ * @brief Command for moving a curve point
+ */
+class MoveCurvePointCommand : public QUndoCommand {
+public:
+  MoveCurvePointCommand(NMCurveEditorPanel *panel, CurvePointId pointId,
+                        qreal oldTime, qreal oldValue, qreal newTime,
+                        qreal newValue, QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+  bool mergeWith(const QUndoCommand *other) override;
+  int id() const override { return 4; }
+
+private:
+  QPointer<NMCurveEditorPanel> m_panel;
+  CurvePointId m_pointId = 0;
+  qreal m_oldTime = 0.0;
+  qreal m_oldValue = 0.0;
+  qreal m_newTime = 0.0;
+  qreal m_newValue = 0.0;
+};
+
+/**
+ * @brief Batch command for editing multiple curve points
+ */
+class CurveEditCommand : public QUndoCommand {
+public:
+  CurveEditCommand(NMCurveEditorPanel *panel,
+                   const QString &description = "Edit Curve",
+                   QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+  /**
+   * @brief Add a point modification to the batch
+   */
+  void addPointChange(CurvePointId pointId, qreal oldTime, qreal oldValue,
+                      qreal newTime, qreal newValue);
+
+private:
+  QPointer<NMCurveEditorPanel> m_panel;
+  struct PointChange {
+    CurvePointId id;
+    qreal oldTime;
+    qreal oldValue;
+    qreal newTime;
+    qreal newValue;
+  };
+  QVector<PointChange> m_changes;
+};
+
 } // namespace NovelMind::editor::qt
