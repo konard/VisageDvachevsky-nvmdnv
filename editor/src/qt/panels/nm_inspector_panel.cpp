@@ -4,6 +4,8 @@
 #include "NovelMind/editor/project_manager.hpp"
 #include "NovelMind/editor/qt/nm_style_manager.hpp"
 #include "NovelMind/editor/qt/nm_dialogs.hpp"
+#include "NovelMind/editor/inspector_binding.hpp"
+#include "NovelMind/core/property_system.hpp"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -156,7 +158,9 @@ void NMInspectorPanel::inspectSceneObject(NMSceneObject *object,
 
   clear();
   m_noSelectionLabel->hide();
+  m_multiEditMode = false;
   m_currentObjectId = object->id();
+  m_currentObjectIds.clear();
   m_editMode = editable;
 
   const QString typeName = [object]() {
@@ -296,7 +300,9 @@ void NMInspectorPanel::inspectStoryGraphNode(NMGraphNodeItem *node,
 
   clear();
   m_noSelectionLabel->hide();
+  m_multiEditMode = false;
   m_currentObjectId = node->nodeIdString();
+  m_currentObjectIds.clear();
   m_editMode = editable;
 
   m_headerLabel->setText(
@@ -386,9 +392,160 @@ void NMInspectorPanel::inspectStoryGraphNode(NMGraphNodeItem *node,
   m_mainLayout->addStretch();
 }
 
+void NMInspectorPanel::inspectMultipleObjects(
+    const QList<NMSceneObject *> &objects, bool editable) {
+  if (objects.isEmpty()) {
+    showNoSelection();
+    return;
+  }
+
+  clear();
+  m_noSelectionLabel->hide();
+  m_multiEditMode = true;
+  m_editMode = editable;
+
+  // Store object IDs
+  m_currentObjectIds.clear();
+  for (auto *obj : objects) {
+    if (obj) {
+      m_currentObjectIds.append(obj->id());
+    }
+  }
+
+  // Set header showing multi-selection
+  m_headerLabel->setText(QString("<b>%1 Objects Selected</b>")
+                             .arg(objects.size()));
+  m_headerLabel->show();
+
+  // Use InspectorBindingManager to handle multi-object editing
+  auto &inspector = InspectorBindingManager::instance();
+
+  // Prepare targets for binding manager
+  std::vector<std::string> objectIds;
+  std::vector<void *> objectPtrs;
+
+  for (auto *obj : objects) {
+    if (obj) {
+      objectIds.push_back(obj->id().toStdString());
+      objectPtrs.push_back(static_cast<void *>(obj));
+    }
+  }
+
+  inspector.inspectSceneObjects(objectIds, objectPtrs);
+
+  // Get property groups from binding manager
+  auto groups = inspector.getPropertyGroups();
+
+  for (const auto &group : groups) {
+    auto *uiGroup = addGroup(QString::fromStdString(group.name));
+
+    for (const auto *prop : group.properties) {
+      if (!prop)
+        continue;
+
+      const auto &meta = prop->getMeta();
+
+      // Skip hidden or ID properties
+      if (hasFlag(meta.flags, PropertyFlags::Hidden) ||
+          meta.name == "id") {
+        continue;
+      }
+
+      // Get property value (will be MultipleValues if values differ)
+      auto value = inspector.getPropertyValue(meta.name);
+      QString valueStr = QString::fromStdString(PropertyUtils::toString(value));
+
+      // Determine property type
+      NMPropertyType propType = NMPropertyType::String;
+      switch (meta.type) {
+      case PropertyType::Bool:
+        propType = NMPropertyType::Boolean;
+        break;
+      case PropertyType::Int:
+      case PropertyType::Int64:
+        propType = NMPropertyType::Integer;
+        break;
+      case PropertyType::Float:
+      case PropertyType::Double:
+        propType = NMPropertyType::Float;
+        break;
+      case PropertyType::Vector2:
+        propType = NMPropertyType::Vector2;
+        break;
+      case PropertyType::Vector3:
+        propType = NMPropertyType::Vector3;
+        break;
+      case PropertyType::Color:
+        propType = NMPropertyType::Color;
+        break;
+      case PropertyType::Enum:
+        propType = NMPropertyType::Enum;
+        break;
+      case PropertyType::AssetRef:
+        propType = NMPropertyType::Asset;
+        break;
+      case PropertyType::CurveRef:
+        propType = NMPropertyType::Curve;
+        break;
+      default:
+        propType = NMPropertyType::String;
+        break;
+      }
+
+      if (m_editMode && !hasFlag(meta.flags, PropertyFlags::ReadOnly)) {
+        // Add editable property
+        QStringList enumOptions;
+        if (meta.type == PropertyType::Enum) {
+          for (const auto &opt : meta.enumOptions) {
+            enumOptions.append(QString::fromStdString(opt.second));
+          }
+        }
+
+        if (auto *widget = uiGroup->addEditableProperty(
+                QString::fromStdString(meta.name),
+                QString::fromStdString(meta.displayName), propType, valueStr,
+                enumOptions)) {
+          trackPropertyWidget(QString::fromStdString(meta.name), widget);
+
+          // Special styling for "multiple values" placeholder
+          if (valueStr == "<multiple values>") {
+            if (auto *lineEdit = qobject_cast<QLineEdit *>(widget)) {
+              lineEdit->setPlaceholderText("<multiple values>");
+              lineEdit->clear();
+            }
+          }
+        }
+      } else {
+        // Read-only property
+        uiGroup->addProperty(QString::fromStdString(meta.displayName),
+                             valueStr);
+      }
+    }
+
+    connect(uiGroup, &NMPropertyGroup::propertyValueChanged, this,
+            &NMInspectorPanel::onGroupPropertyChanged);
+  }
+
+  m_mainLayout->addStretch();
+}
+
 void NMInspectorPanel::onGroupPropertyChanged(const QString &propertyName,
                                               const QString &newValue) {
-  // Emit signal that property was changed
+  // In multi-edit mode, apply changes through InspectorBindingManager
+  if (m_multiEditMode) {
+    auto &inspector = InspectorBindingManager::instance();
+    auto error = inspector.setPropertyValueFromString(
+        propertyName.toStdString(), newValue.toStdString());
+
+    if (error.has_value()) {
+      // TODO: Show error message to user
+      qWarning() << "Failed to set property:" << propertyName
+                 << "Error:" << QString::fromStdString(error.value());
+    }
+    return;
+  }
+
+  // Single-object mode: emit signal
   emit propertyChanged(m_currentObjectId, propertyName, newValue);
 }
 
