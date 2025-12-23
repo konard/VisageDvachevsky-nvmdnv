@@ -414,7 +414,23 @@ void NMInspectorPanel::updatePropertyValue(const QString &propertyName,
   } else if (auto *textEdit = qobject_cast<QPlainTextEdit *>(widget)) {
     textEdit->setPlainText(newValue);
   } else if (auto *button = qobject_cast<QPushButton *>(widget)) {
-    button->setText(newValue.isEmpty() ? "(Select Asset)" : newValue);
+    // Check if this is a curve button or asset button
+    if (button->text() == tr("Edit Curve...")) {
+      button->setProperty("curveId", newValue);
+    } else {
+      button->setText(newValue.isEmpty() ? "(Select Asset)" : newValue);
+    }
+  } else {
+    // Handle vector widgets (Vector2/Vector3)
+    // Vector widgets are container QWidgets with child spinboxes
+    QList<QDoubleSpinBox *> spinBoxes = widget->findChildren<QDoubleSpinBox *>();
+    if (!spinBoxes.isEmpty()) {
+      QStringList components = newValue.split(',');
+      for (int i = 0; i < spinBoxes.size() && i < components.size(); ++i) {
+        QSignalBlocker spinBoxBlocker(spinBoxes[i]);
+        spinBoxes[i]->setValue(components[i].toDouble());
+      }
+    }
   }
 }
 
