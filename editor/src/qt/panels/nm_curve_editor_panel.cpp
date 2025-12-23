@@ -1,5 +1,6 @@
 #include "NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp"
 #include "NovelMind/editor/qt/nm_icon_manager.hpp"
+#include "NovelMind/editor/qt/nm_undo_manager.hpp"
 
 #include <QComboBox>
 #include <QGraphicsScene>
@@ -306,7 +307,13 @@ void NMCurveEditorPanel::setCurve(const QString &curveId) {
 void NMCurveEditorPanel::addPointAt(qreal time, qreal value) {
   CurveInterpolation interp =
       static_cast<CurveInterpolation>(m_interpCombo->currentIndex());
-  m_curveData.addPoint(time, value, interp);
+  CurvePointId pointId = m_curveData.addPoint(time, value, interp);
+
+  // Create undo command for adding point
+  auto *cmd = new AddCurvePointCommand(this, pointId, time, value,
+                                       static_cast<int>(interp));
+  NMUndoManager::instance().pushCommand(cmd);
+
   rebuildCurveVisuals();
   emit curveChanged(m_curveId);
 }
@@ -316,10 +323,32 @@ void NMCurveEditorPanel::deleteSelectedPoints() {
     return;
   }
 
+  // Create macro for deleting multiple points
+  if (m_selectedPoints.size() > 1) {
+    NMUndoManager::instance().beginMacro("Delete Curve Points");
+  }
+
   // Remove selected points (in reverse order to maintain valid IDs)
   for (auto it = m_selectedPoints.rbegin(); it != m_selectedPoints.rend();
        ++it) {
+    // Capture point state before deleting
+    if (const CurveDataPoint *pt = m_curveData.getPoint(*it)) {
+      CurvePointSnapshot snapshot;
+      snapshot.id = pt->id;
+      snapshot.time = pt->time;
+      snapshot.value = pt->value;
+      snapshot.interpolation = static_cast<int>(pt->interpolation);
+
+      // Create and push delete command
+      auto *cmd = new DeleteCurvePointCommand(this, snapshot);
+      NMUndoManager::instance().pushCommand(cmd);
+    }
+
     m_curveData.removePoint(*it);
+  }
+
+  if (m_selectedPoints.size() > 1) {
+    NMUndoManager::instance().endMacro();
   }
 
   m_selectedPoints.clear();
@@ -399,6 +428,11 @@ void NMCurveEditorPanel::onPointClicked(CurvePointId id, bool additive) {
     }
   }
 
+  // Capture initial position for potential drag (for undo)
+  if (const CurveDataPoint *point = m_curveData.getPoint(id)) {
+    m_dragStartPositions[id] = {point->time, point->value};
+  }
+
   // Update interpolation combo to reflect selected point's interpolation
   if (m_selectedPoints.size() == 1) {
     if (const CurveDataPoint *point = m_curveData.getPoint(m_selectedPoints[0])) {
@@ -410,7 +444,27 @@ void NMCurveEditorPanel::onPointClicked(CurvePointId id, bool additive) {
 }
 
 void NMCurveEditorPanel::onPointDragFinished(CurvePointId id) {
-  Q_UNUSED(id);
+  // Create undo command for the move
+  if (auto it = m_dragStartPositions.find(id); it != m_dragStartPositions.end()) {
+    const CurveDataPoint *point = m_curveData.getPoint(id);
+    if (point) {
+      qreal oldTime = it->second.first;
+      qreal oldValue = it->second.second;
+      qreal newTime = point->time;
+      qreal newValue = point->value;
+
+      // Only create command if position actually changed
+      if (oldTime != newTime || oldValue != newValue) {
+        auto *cmd = new MoveCurvePointCommand(this, id, oldTime, oldValue,
+                                              newTime, newValue);
+        NMUndoManager::instance().pushCommand(cmd);
+      }
+    }
+
+    // Clear the drag start position
+    m_dragStartPositions.erase(it);
+  }
+
   // Sort points after drag
   m_curveData.sortByTime();
   rebuildCurveVisuals();

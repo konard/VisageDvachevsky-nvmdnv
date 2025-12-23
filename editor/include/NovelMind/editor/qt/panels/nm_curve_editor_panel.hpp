@@ -327,6 +327,9 @@ private:
   // Selection state
   std::vector<CurvePointId> m_selectedPoints;
 
+  // Drag tracking for undo
+  std::unordered_map<CurvePointId, std::pair<qreal, qreal>> m_dragStartPositions;
+
   // Layout constants
   static constexpr qreal MARGIN = 40.0;
   static constexpr int GRID_DIVISIONS = 10;
