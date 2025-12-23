@@ -55,6 +55,11 @@ add_library(novelmind_editor STATIC
     src/hotkeys_manager.cpp
     src/project_integrity.cpp
 
+    # Performance optimization components
+    src/qt/lazy_thumbnail_loader.cpp
+    src/qt/timeline_render_cache.cpp
+    src/qt/performance_metrics.cpp
+
     # Qt6 GUI implementation
     src/qt/qt_event_bus.cpp
     src/qt/qt_selection_manager.cpp
@@ -125,6 +130,11 @@ add_library(novelmind_editor STATIC
     src/qt/panels/nm_play_toolbar_panel.cpp
     src/qt/panels/nm_debug_overlay_panel.cpp
     src/qt/panels/nm_issues_panel.cpp
+
+    # Performance optimization headers
+    include/NovelMind/editor/qt/lazy_thumbnail_loader.hpp
+    include/NovelMind/editor/qt/timeline_render_cache.hpp
+    include/NovelMind/editor/qt/performance_metrics.hpp
 
     # Qt6 Headers (required for AUTOMOC to work)
     include/NovelMind/editor/qt/qt_event_bus.hpp

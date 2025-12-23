@@ -13,9 +13,11 @@
  * - Working Curve Editor
  * - Synchronization with Play-In-Editor
  * - Track grouping and filtering
+ * - Render caching with memory limits and LRU eviction
  */
 
 #include "NovelMind/editor/qt/nm_dock_panel.hpp"
+#include "NovelMind/editor/qt/timeline_render_cache.hpp"
 
 #include <QGraphicsScene>
 #include <QGraphicsView>
@@ -28,6 +30,8 @@
 #include <QUndoStack>
 
 #include "NovelMind/editor/qt/panels/nm_keyframe_item.hpp"
+#include <memory>
+#include <atomic>
 
 class QToolBar;
 class QPushButton;
@@ -387,6 +391,19 @@ private:
   static constexpr int TRACK_HEIGHT = 32;
   static constexpr int TRACK_HEADER_WIDTH = 150;
   static constexpr int TIMELINE_MARGIN = 20;
+
+  // Render caching for timeline tracks
+  std::unique_ptr<TimelineRenderCache> m_renderCache;
+  std::atomic<uint64_t> m_dataVersion{0};  // For cache invalidation
+
+  // Performance tracking
+  double m_lastRenderTimeMs = 0.0;
+  int m_lastSceneItemCount = 0;
+
+  // Helper methods for cached rendering
+  void invalidateRenderCache();
+  void invalidateTrackCache(int trackIndex);
+  void recordRenderMetrics(double renderTimeMs, int itemCount);
 };
 
 } // namespace NovelMind::editor::qt

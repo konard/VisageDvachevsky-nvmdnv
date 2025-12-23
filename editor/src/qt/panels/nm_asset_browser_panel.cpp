@@ -3,6 +3,7 @@
 #include "NovelMind/editor/qt/nm_style_manager.hpp"
 #include "NovelMind/editor/qt/nm_dialogs.hpp"
 #include "NovelMind/editor/qt/qt_event_bus.hpp"
+#include "NovelMind/editor/qt/performance_metrics.hpp"
 
 #include <QAction>
 #include <QComboBox>
@@ -28,6 +29,8 @@
 #include <QVBoxLayout>
 #include <QPainter>
 #include <QRunnable>
+#include <QScrollBar>
+#include <QTimer>
 
 namespace NovelMind::editor::qt {
 
@@ -194,15 +197,46 @@ NMAssetBrowserPanel::NMAssetBrowserPanel(QWidget *parent)
   // Initialize thumbnail cache (max 50MB)
   m_thumbnailCache.setMaxCost(50 * 1024);
 
-  // Initialize thread pool for background loading
+  // Initialize thread pool for background loading (legacy)
   m_thumbnailThreadPool = new QThreadPool(this);
   m_thumbnailThreadPool->setMaxThreadCount(2);
+
+  // Initialize lazy thumbnail loader with proper config
+  ThumbnailLoaderConfig loaderConfig;
+  loaderConfig.maxConcurrentTasks = 2;
+  loaderConfig.maxCacheSizeKB = 50 * 1024;  // 50 MB
+  loaderConfig.thumbnailSize = 80;
+  loaderConfig.queueHighWaterMark = 100;
+  m_lazyLoader = std::make_unique<LazyThumbnailLoader>(loaderConfig, this);
+
+  // Connect lazy loader signals
+  connect(m_lazyLoader.get(), &LazyThumbnailLoader::thumbnailReady,
+          this, &NMAssetBrowserPanel::onLazyThumbnailReady);
+
+  // Setup visibility update timer for lazy loading visible items
+  m_visibilityUpdateTimer = new QTimer(this);
+  m_visibilityUpdateTimer->setInterval(100);  // 100ms debounce
+  m_visibilityUpdateTimer->setSingleShot(true);
+  connect(m_visibilityUpdateTimer, &QTimer::timeout,
+          this, &NMAssetBrowserPanel::updateVisibleItems);
 
   setupContent();
   setupToolBar();
 }
 
 NMAssetBrowserPanel::~NMAssetBrowserPanel() {
+  // Stop visibility timer first
+  if (m_visibilityUpdateTimer) {
+    m_visibilityUpdateTimer->stop();
+  }
+
+  // Cancel all pending lazy loading tasks (safe shutdown)
+  if (m_lazyLoader) {
+    m_lazyLoader->cancelPending();
+    // LazyThumbnailLoader destructor handles waiting for tasks
+  }
+
+  // Legacy cleanup
   cancelPendingThumbnails();
   if (m_thumbnailThreadPool) {
     m_thumbnailThreadPool->waitForDone(1000);
@@ -1076,14 +1110,21 @@ bool NMAssetBrowserPanel::isThumbnailValid(
 }
 
 void NMAssetBrowserPanel::scheduleVisibleThumbnails() {
-  // TODO: Implement lazy loading for visible items only
-  // This would iterate through visible items in the list view
-  // and schedule background loading tasks
+  // Trigger visibility update with debouncing to avoid excessive calls
+  if (m_visibilityUpdateTimer && !m_visibilityUpdateTimer->isActive()) {
+    m_visibilityUpdateTimer->start();
+  }
 }
 
 void NMAssetBrowserPanel::cancelPendingThumbnails() {
   m_pendingThumbnails.clear();
-  // Note: QThreadPool doesn't support cancellation of running tasks
+
+  // Cancel via the lazy loader (supports proper cancellation)
+  if (m_lazyLoader) {
+    m_lazyLoader->cancelPending();
+  }
+
+  // Note: Legacy QThreadPool doesn't support cancellation of running tasks
   // We rely on QPointer checks in the runnable to abort gracefully
 }
 
@@ -1129,6 +1170,74 @@ void NMAssetBrowserPanel::onThumbnailReady(const QString &path,
 
   if (!pixmap.isNull() && m_listView) {
     // Force model to refresh the icon for this item
+    m_listView->update();
+  }
+}
+
+void NMAssetBrowserPanel::updateVisibleItems() {
+  if (!m_listView || !m_listModel || !m_lazyLoader) {
+    return;
+  }
+
+  // Get visible rect
+  QRect visibleRect = m_listView->viewport()->rect();
+
+  // Clear previous visible paths
+  m_visiblePaths.clear();
+
+  // Iterate through visible items
+  QModelIndex rootIndex = m_listView->rootIndex();
+  for (int row = 0; row < m_listModel->rowCount(
+           m_filterProxy ? m_filterProxy->mapToSource(rootIndex) : rootIndex);
+       ++row) {
+    QModelIndex proxyIndex =
+        m_filterProxy
+            ? m_filterProxy->index(row, 0, rootIndex)
+            : m_listModel->index(row, 0,
+                                 m_filterProxy ? m_filterProxy->mapToSource(rootIndex)
+                                               : rootIndex);
+
+    QRect itemRect = m_listView->visualRect(proxyIndex);
+    if (visibleRect.intersects(itemRect)) {
+      QModelIndex sourceIndex =
+          m_filterProxy ? m_filterProxy->mapToSource(proxyIndex) : proxyIndex;
+      QString path = m_listModel->filePath(sourceIndex);
+      QFileInfo info(path);
+
+      if (info.isFile() && isImageExtension(info.suffix())) {
+        m_visiblePaths.insert(path);
+
+        // Request thumbnail with high priority for visible items
+        m_lazyLoader->requestThumbnail(path, m_listView->iconSize(), 10);
+      }
+    }
+  }
+
+  // Record metrics
+  PerformanceMetrics::instance().recordCount("AssetBrowser.visibleItems",
+                                              m_visiblePaths.size());
+  auto stats = m_lazyLoader->getStats();
+  PerformanceMetrics::instance().recordCount(
+      PerformanceMetrics::METRIC_CACHE_SIZE_KB,
+      static_cast<int>(stats.cacheSizeKB));
+}
+
+void NMAssetBrowserPanel::onLazyThumbnailReady(const QString &path,
+                                               const QPixmap &pixmap) {
+  // Update the legacy cache for icon provider compatibility
+  if (!pixmap.isNull()) {
+    QFileInfo info(path);
+    auto *entry = new ThumbnailCacheEntry{pixmap, info.lastModified(), info.size()};
+    m_thumbnailCache.insert(path, entry,
+                            static_cast<int>(pixmap.width() * pixmap.height() * 4 / 1024));
+  }
+
+  // Record successful load
+  PerformanceMetrics::instance().recordCount(
+      PerformanceMetrics::METRIC_THUMBNAIL_CACHE_HIT, 1);
+
+  // Update the list view to show the new thumbnail
+  if (m_listView) {
     m_listView->update();
   }
 }

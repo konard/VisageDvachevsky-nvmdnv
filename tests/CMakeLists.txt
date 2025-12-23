@@ -57,6 +57,7 @@ if(NOVELMIND_BUILD_EDITOR)
         integration/test_editor_settings.cpp
         integration/test_asset_browser.cpp
         integration/test_voice_manager.cpp
+        unit/test_performance_cache.cpp
     )
 
     target_link_libraries(integration_tests

@@ -13,9 +13,12 @@
  * - Stable IDs during renaming
  * - Import/export controls
  * - Undo/redo for asset operations
+ * - Lazy thumbnail loading with task cancellation
+ * - Memory-bounded thumbnail cache with LRU eviction
  */
 
 #include "NovelMind/editor/qt/nm_dock_panel.hpp"
+#include "NovelMind/editor/qt/lazy_thumbnail_loader.hpp"
 #include <QFileIconProvider>
 #include <QFileSystemModel>
 #include <QFrame>
@@ -35,6 +38,7 @@
 #include <QThreadPool>
 #include <QPointer>
 #include <QRunnable>
+#include <memory>
 
 namespace NovelMind::editor::qt {
 
@@ -249,11 +253,21 @@ private:
   // Audio waveform display
   QLabel *m_waveformLabel = nullptr;
 
-  // Thread pool for background thumbnail loading
+  // Thread pool for background thumbnail loading (legacy - kept for compatibility)
   QPointer<QThreadPool> m_thumbnailThreadPool;
 
   // Pending thumbnail requests (for cancellation)
   QSet<QString> m_pendingThumbnails;
+
+  // Lazy thumbnail loader with task cancellation and parallelism limits
+  std::unique_ptr<LazyThumbnailLoader> m_lazyLoader;
+
+  // Visible items tracking for prioritizing thumbnail loading
+  QSet<QString> m_visiblePaths;
+  QTimer *m_visibilityUpdateTimer = nullptr;
+
+  void updateVisibleItems();
+  void onLazyThumbnailReady(const QString &path, const QPixmap &pixmap);
 };
 
 } // namespace NovelMind::editor::qt
