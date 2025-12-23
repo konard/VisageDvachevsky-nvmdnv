@@ -583,4 +583,386 @@ bool MoveGraphNodesCommand::mergeWith(const QUndoCommand *other) {
   return true;
 }
 
+// =============================================================================
+// Timeline Commands Implementation
+// =============================================================================
+
+#include "NovelMind/editor/qt/panels/nm_timeline_panel.hpp"
+
+TimelineKeyframeMoveCommand::TimelineKeyframeMoveCommand(
+    NMTimelinePanel *panel, const QString &trackName, int oldFrame,
+    int newFrame, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_trackName(trackName),
+      m_oldFrame(oldFrame), m_newFrame(newFrame) {
+  setText(QString("Move Keyframe in %1").arg(trackName));
+}
+
+void TimelineKeyframeMoveCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->moveKeyframe(m_newFrame, m_oldFrame);
+}
+
+void TimelineKeyframeMoveCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->moveKeyframe(m_oldFrame, m_newFrame);
+}
+
+bool TimelineKeyframeMoveCommand::mergeWith(const QUndoCommand *other) {
+  if (other->id() != id()) {
+    return false;
+  }
+  const auto *moveCmd = static_cast<const TimelineKeyframeMoveCommand *>(other);
+  if (moveCmd->m_panel != m_panel || moveCmd->m_trackName != m_trackName) {
+    return false;
+  }
+  // Merge consecutive moves of the same keyframe
+  if (moveCmd->m_oldFrame == m_newFrame) {
+    m_newFrame = moveCmd->m_newFrame;
+    return true;
+  }
+  return false;
+}
+
+AddKeyframeCommand::AddKeyframeCommand(NMTimelinePanel *panel,
+                                       const QString &trackName,
+                                       const KeyframeSnapshot &snapshot,
+                                       QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_trackName(trackName),
+      m_snapshot(snapshot) {
+  setText(QString("Add Keyframe to %1").arg(trackName));
+}
+
+void AddKeyframeCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->removeKeyframe(m_snapshot.frame);
+}
+
+void AddKeyframeCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->addKeyframe(m_snapshot.frame, m_snapshot.value,
+                     static_cast<EasingType>(m_snapshot.easingType));
+  if (auto *kf = track->getKeyframe(m_snapshot.frame)) {
+    kf->handleInX = m_snapshot.handleInX;
+    kf->handleInY = m_snapshot.handleInY;
+    kf->handleOutX = m_snapshot.handleOutX;
+    kf->handleOutY = m_snapshot.handleOutY;
+  }
+}
+
+DeleteKeyframeCommand::DeleteKeyframeCommand(NMTimelinePanel *panel,
+                                             const QString &trackName,
+                                             const KeyframeSnapshot &snapshot,
+                                             QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_trackName(trackName),
+      m_snapshot(snapshot) {
+  setText(QString("Delete Keyframe from %1").arg(trackName));
+}
+
+void DeleteKeyframeCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->addKeyframe(m_snapshot.frame, m_snapshot.value,
+                     static_cast<EasingType>(m_snapshot.easingType));
+  if (auto *kf = track->getKeyframe(m_snapshot.frame)) {
+    kf->handleInX = m_snapshot.handleInX;
+    kf->handleInY = m_snapshot.handleInY;
+    kf->handleOutX = m_snapshot.handleOutX;
+    kf->handleOutY = m_snapshot.handleOutY;
+  }
+}
+
+void DeleteKeyframeCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  track->removeKeyframe(m_snapshot.frame);
+}
+
+ChangeKeyframeEasingCommand::ChangeKeyframeEasingCommand(
+    NMTimelinePanel *panel, const QString &trackName, int frame, int oldEasing,
+    int newEasing, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_trackName(trackName),
+      m_frame(frame), m_oldEasing(oldEasing), m_newEasing(newEasing) {
+  setText(QString("Change Keyframe Easing in %1").arg(trackName));
+}
+
+void ChangeKeyframeEasingCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  if (auto *kf = track->getKeyframe(m_frame)) {
+    kf->easing = static_cast<EasingType>(m_oldEasing);
+  }
+}
+
+void ChangeKeyframeEasingCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  auto *track = m_panel->getTrack(m_trackName);
+  if (!track) {
+    return;
+  }
+  if (auto *kf = track->getKeyframe(m_frame)) {
+    kf->easing = static_cast<EasingType>(m_newEasing);
+  }
+}
+
+// =============================================================================
+// Localization Commands Implementation
+// =============================================================================
+
+#include "NovelMind/editor/qt/panels/nm_localization_panel.hpp"
+
+AddLocalizationKeyCommand::AddLocalizationKeyCommand(
+    NMLocalizationPanel *panel, const QString &key, const QString &defaultValue,
+    QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_key(key),
+      m_defaultValue(defaultValue) {
+  setText(QString("Add Localization Key '%1'").arg(key));
+}
+
+void AddLocalizationKeyCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->deleteKey(m_key);
+}
+
+void AddLocalizationKeyCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  // On first redo, the UI already added the key, so skip it
+  if (!m_firstRedo) {
+    m_panel->addKey(m_key, m_defaultValue);
+  }
+  m_firstRedo = false;
+}
+
+DeleteLocalizationKeyCommand::DeleteLocalizationKeyCommand(
+    NMLocalizationPanel *panel, const QString &key,
+    const QHash<QString, QString> &translations, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_key(key),
+      m_translations(translations) {
+  setText(QString("Delete Localization Key '%1'").arg(key));
+}
+
+void DeleteLocalizationKeyCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  // Restore the key with all its translations
+  m_panel->addKey(m_key, m_translations.value(m_panel->property("defaultLocale").toString(), ""));
+  // TODO: Restore all translations - requires panel API enhancement
+}
+
+void DeleteLocalizationKeyCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->deleteKey(m_key);
+}
+
+ChangeTranslationCommand::ChangeTranslationCommand(
+    NMLocalizationPanel *panel, const QString &key, const QString &locale,
+    const QString &oldValue, const QString &newValue, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_key(key), m_locale(locale),
+      m_oldValue(oldValue), m_newValue(newValue) {
+  setText(QString("Change Translation '%1' [%2]").arg(key, locale));
+}
+
+void ChangeTranslationCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  // TODO: Set translation value - requires panel API enhancement
+  emit m_panel->translationChanged(m_key, m_locale, m_oldValue);
+}
+
+void ChangeTranslationCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  // TODO: Set translation value - requires panel API enhancement
+  emit m_panel->translationChanged(m_key, m_locale, m_newValue);
+}
+
+// =============================================================================
+// Curve Editor Commands Implementation
+// =============================================================================
+
+#include "NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp"
+
+AddCurvePointCommand::AddCurvePointCommand(NMCurveEditorPanel *panel,
+                                           CurvePointId pointId, qreal time,
+                                           qreal value, int interpolation,
+                                           QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel) {
+  m_snapshot.id = pointId;
+  m_snapshot.time = time;
+  m_snapshot.value = value;
+  m_snapshot.interpolation = interpolation;
+  setText("Add Curve Point");
+}
+
+void AddCurvePointCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->curveData().removePoint(m_snapshot.id);
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+void AddCurvePointCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  // On first redo, the point may already be added by UI
+  if (!m_firstRedo) {
+    m_panel->curveData().addPoint(
+        m_snapshot.time, m_snapshot.value,
+        static_cast<CurveInterpolation>(m_snapshot.interpolation));
+  }
+  m_firstRedo = false;
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+DeleteCurvePointCommand::DeleteCurvePointCommand(
+    NMCurveEditorPanel *panel, const CurvePointSnapshot &snapshot,
+    QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_snapshot(snapshot) {
+  setText("Delete Curve Point");
+}
+
+void DeleteCurvePointCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->curveData().addPoint(
+      m_snapshot.time, m_snapshot.value,
+      static_cast<CurveInterpolation>(m_snapshot.interpolation));
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+void DeleteCurvePointCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->curveData().removePoint(m_snapshot.id);
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+MoveCurvePointCommand::MoveCurvePointCommand(NMCurveEditorPanel *panel,
+                                             CurvePointId pointId, qreal oldTime,
+                                             qreal oldValue, qreal newTime,
+                                             qreal newValue, QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel), m_pointId(pointId),
+      m_oldTime(oldTime), m_oldValue(oldValue), m_newTime(newTime),
+      m_newValue(newValue) {
+  setText("Move Curve Point");
+}
+
+void MoveCurvePointCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->curveData().updatePoint(m_pointId, m_oldTime, m_oldValue);
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+void MoveCurvePointCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  m_panel->curveData().updatePoint(m_pointId, m_newTime, m_newValue);
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+bool MoveCurvePointCommand::mergeWith(const QUndoCommand *other) {
+  if (other->id() != id()) {
+    return false;
+  }
+  const auto *moveCmd = static_cast<const MoveCurvePointCommand *>(other);
+  if (moveCmd->m_panel != m_panel || moveCmd->m_pointId != m_pointId) {
+    return false;
+  }
+  // Merge consecutive moves of the same point
+  m_newTime = moveCmd->m_newTime;
+  m_newValue = moveCmd->m_newValue;
+  return true;
+}
+
+CurveEditCommand::CurveEditCommand(NMCurveEditorPanel *panel,
+                                   const QString &description,
+                                   QUndoCommand *parent)
+    : QUndoCommand(parent), m_panel(panel) {
+  setText(description);
+}
+
+void CurveEditCommand::undo() {
+  if (!m_panel) {
+    return;
+  }
+  // Apply old values in reverse order
+  for (auto it = m_changes.rbegin(); it != m_changes.rend(); ++it) {
+    m_panel->curveData().updatePoint(it->id, it->oldTime, it->oldValue);
+  }
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+void CurveEditCommand::redo() {
+  if (!m_panel) {
+    return;
+  }
+  // Apply new values
+  for (const auto &change : m_changes) {
+    m_panel->curveData().updatePoint(change.id, change.newTime, change.newValue);
+  }
+  emit m_panel->curveChanged(m_panel->curveId());
+}
+
+void CurveEditCommand::addPointChange(CurvePointId pointId, qreal oldTime,
+                                      qreal oldValue, qreal newTime,
+                                      qreal newValue) {
+  m_changes.append({pointId, oldTime, oldValue, newTime, newValue});
+}
+
 } // namespace NovelMind::editor::qt

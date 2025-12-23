@@ -1,6 +1,7 @@
 #include "NovelMind/editor/qt/panels/nm_localization_panel.hpp"
 #include "NovelMind/editor/project_manager.hpp"
 #include "NovelMind/editor/qt/nm_dialogs.hpp"
+#include "NovelMind/editor/qt/nm_undo_manager.hpp"
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -492,8 +493,19 @@ void NMLocalizationPanel::onCellChanged(int row, int column) {
   const QString key = idItem->text();
   const QString value = valueItem->text();
 
-  // Update in-memory entry
+  // Capture old value for undo
+  QString oldValue;
   if (m_entries.contains(key)) {
+    oldValue = m_entries[key].translations.value(m_currentLocale, "");
+
+    // Only create undo command if value changed
+    if (oldValue != value) {
+      auto *cmd = new ChangeTranslationCommand(this, key, m_currentLocale,
+                                               oldValue, value);
+      NMUndoManager::instance().pushCommand(cmd);
+    }
+
+    // Update in-memory entry
     m_entries[key].translations[m_currentLocale] = value;
     m_entries[key].isMissing = value.isEmpty();
     m_entries[key].isModified = true;
@@ -520,6 +532,10 @@ void NMLocalizationPanel::onAddKeyClicked() {
   }
 
   if (addKey(key, defaultValue)) {
+    // Create undo command for adding key
+    auto *cmd = new AddLocalizationKeyCommand(this, key, defaultValue);
+    NMUndoManager::instance().pushCommand(cmd);
+
     rebuildTable();
 
     // Select the new row
@@ -676,8 +692,27 @@ void NMLocalizationPanel::onDeleteKeyClicked() {
     return;
   }
 
+  // Create macro for deleting multiple keys
+  if (keysToDelete.size() > 1) {
+    NMUndoManager::instance().beginMacro("Delete Localization Keys");
+  }
+
   for (const QString &key : keysToDelete) {
+    // Capture translations before deleting
+    QHash<QString, QString> translations;
+    if (m_entries.contains(key)) {
+      translations = m_entries[key].translations;
+    }
+
+    // Create and push delete command
+    auto *cmd = new DeleteLocalizationKeyCommand(this, key, translations);
+    NMUndoManager::instance().pushCommand(cmd);
+
     deleteKey(key);
+  }
+
+  if (keysToDelete.size() > 1) {
+    NMUndoManager::instance().endMacro();
   }
 
   rebuildTable();
