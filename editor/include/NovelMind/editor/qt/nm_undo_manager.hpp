@@ -290,6 +290,44 @@ private:
 };
 
 /**
+ * @brief Command for toggling object visibility
+ */
+class ToggleObjectVisibilityCommand : public QUndoCommand {
+public:
+  ToggleObjectVisibilityCommand(NMSceneViewPanel *panel, const QString &objectId,
+                                bool oldVisible, bool newVisible,
+                                QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMSceneViewPanel> m_panel;
+  QString m_objectId;
+  bool m_oldVisible = true;
+  bool m_newVisible = true;
+};
+
+/**
+ * @brief Command for toggling object locked state
+ */
+class ToggleObjectLockedCommand : public QUndoCommand {
+public:
+  ToggleObjectLockedCommand(NMSceneViewPanel *panel, const QString &objectId,
+                            bool oldLocked, bool newLocked,
+                            QUndoCommand *parent = nullptr);
+
+  void undo() override;
+  void redo() override;
+
+private:
+  QPointer<NMSceneViewPanel> m_panel;
+  QString m_objectId;
+  bool m_oldLocked = false;
+  bool m_newLocked = false;
+};
+
+/**
  * @brief Command for creating a graph node
  */
 class CreateGraphNodeCommand : public QUndoCommand {
