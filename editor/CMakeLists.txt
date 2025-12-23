@@ -109,6 +109,7 @@ add_library(novelmind_editor STATIC
 
     # Phase 3 & 4 panels
     src/qt/panels/nm_timeline_panel.cpp
+    src/qt/panels/nm_keyframe_item.cpp
     src/qt/panels/nm_curve_editor_panel.cpp
     src/qt/panels/nm_voice_manager_panel.cpp
     src/qt/panels/nm_localization_panel.cpp
@@ -146,6 +147,7 @@ add_library(novelmind_editor STATIC
     include/NovelMind/editor/qt/panels/nm_script_editor_panel.hpp
     include/NovelMind/editor/qt/panels/nm_script_doc_panel.hpp
     include/NovelMind/editor/qt/panels/nm_timeline_panel.hpp
+    include/NovelMind/editor/qt/panels/nm_keyframe_item.hpp
     include/NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp
     include/NovelMind/editor/qt/panels/nm_voice_manager_panel.hpp
     include/NovelMind/editor/qt/panels/nm_localization_panel.hpp
