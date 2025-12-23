@@ -363,6 +363,13 @@ public:
    */
   void createNode(const QString &nodeType);
 
+  /**
+   * @brief Navigate to a node and highlight it
+   * @param nodeIdString The node ID to navigate to
+   * @return true if navigation succeeded, false if node not found
+   */
+  bool navigateToNode(const QString &nodeIdString);
+
 signals:
   void nodeSelected(const QString &nodeIdString);
   void nodeActivated(const QString &nodeIdString);

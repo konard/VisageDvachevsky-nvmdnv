@@ -29,7 +29,12 @@ public:
 
   void addDiagnostic(const QString &type, const QString &message,
                      const QString &file = QString(), int line = -1);
+  void addDiagnosticWithLocation(const QString &type, const QString &message,
+                                 const QString &location);
   void clearDiagnostics();
+
+signals:
+  void diagnosticActivated(const QString &location);
 
 private:
   void setupUI();

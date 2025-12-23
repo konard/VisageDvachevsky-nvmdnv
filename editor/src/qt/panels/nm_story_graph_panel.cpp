@@ -375,4 +375,38 @@ void NMStoryGraphPanel::setupNodePalette() {
           &NMStoryGraphPanel::onNodeTypeSelected);
 }
 
+bool NMStoryGraphPanel::navigateToNode(const QString &nodeIdString) {
+  if (nodeIdString.isEmpty() || !m_scene || !m_view) {
+    return false;
+  }
+
+  // Find the node
+  NMGraphNodeItem *node = findNodeByIdString(nodeIdString);
+  if (!node) {
+    qWarning() << "[StoryGraph] Node not found for navigation:" << nodeIdString;
+    return false;
+  }
+
+  // Clear previous selection
+  for (auto *item : m_scene->items()) {
+    if (auto *n = qgraphicsitem_cast<NMGraphNodeItem *>(item)) {
+      n->setSelected(false);
+    }
+  }
+
+  // Select and highlight the target node
+  node->setSelected(true);
+
+  // Center the view on the node
+  m_view->centerOn(node);
+
+  // Show and raise the panel
+  show();
+  raise();
+  setFocus();
+
+  qDebug() << "[StoryGraph] Navigated to node:" << nodeIdString;
+  return true;
+}
+
 } // namespace NovelMind::editor::qt

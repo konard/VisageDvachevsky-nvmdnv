@@ -544,6 +544,12 @@ void NMMainWindow::setupConnections() {
             }
           });
 
+  // Diagnostics panel navigation
+  connect(m_diagnosticsPanel, &NMDiagnosticsPanel::diagnosticActivated, this,
+          [this](const QString &location) {
+            handleNavigationRequest(location);
+          });
+
   connect(m_assetBrowserPanel, &NMAssetBrowserPanel::assetDoubleClicked, this,
           [this](const QString &path) {
             if (path.endsWith(".nms")) {
@@ -883,6 +889,83 @@ void NMMainWindow::setupConnections() {
               // through the undo system when connected to property changes
             });
   }
+}
+
+void NMMainWindow::handleNavigationRequest(const QString &locationString) {
+  if (locationString.isEmpty()) {
+    qWarning() << "[Navigation] Empty location string";
+    return;
+  }
+
+  // Split location string to determine type
+  QStringList parts = locationString.split(':');
+  if (parts.size() < 2) {
+    qWarning() << "[Navigation] Invalid location format:" << locationString;
+    return;
+  }
+
+  QString typeStr = parts[0].trimmed();
+
+  // Navigate to StoryGraph node
+  if (typeStr.compare("StoryGraph", Qt::CaseInsensitive) == 0) {
+    if (!m_storyGraphPanel) {
+      qWarning() << "[Navigation] StoryGraph panel not available";
+      return;
+    }
+
+    QString nodeId = parts[1].trimmed();
+    if (nodeId.isEmpty()) {
+      qWarning() << "[Navigation] Empty node ID";
+      return;
+    }
+
+    qDebug() << "[Navigation] Navigating to StoryGraph node:" << nodeId;
+    if (m_storyGraphPanel->navigateToNode(nodeId)) {
+      qDebug() << "[Navigation] Successfully navigated to node:" << nodeId;
+    } else {
+      qWarning() << "[Navigation] Failed to navigate to node:" << nodeId;
+      m_diagnosticsPanel->addDiagnosticWithLocation(
+          "Warning", QString("Could not find node '%1'").arg(nodeId),
+          locationString);
+    }
+    return;
+  }
+
+  // Navigate to Script file
+  if (typeStr.compare("Script", Qt::CaseInsensitive) == 0) {
+    if (!m_scriptEditorPanel) {
+      qWarning() << "[Navigation] Script editor panel not available";
+      return;
+    }
+
+    if (parts.size() < 2) {
+      qWarning() << "[Navigation] Missing file path in Script location";
+      return;
+    }
+
+    QString filePath = parts[1].trimmed();
+    if (filePath.isEmpty()) {
+      qWarning() << "[Navigation] Empty file path";
+      return;
+    }
+
+    int lineNumber = -1;
+    if (parts.size() >= 3) {
+      bool ok = false;
+      lineNumber = parts[2].trimmed().toInt(&ok);
+      if (!ok || lineNumber < 1) {
+        qWarning() << "[Navigation] Invalid line number:" << parts[2];
+        lineNumber = -1;
+      }
+    }
+
+    qDebug() << "[Navigation] Navigating to Script:" << filePath
+             << "line:" << lineNumber;
+    m_scriptEditorPanel->goToLocation(filePath, lineNumber);
+    return;
+  }
+
+  qWarning() << "[Navigation] Unknown location type:" << typeStr;
 }
 
 } // namespace NovelMind::editor::qt

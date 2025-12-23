@@ -102,4 +102,8 @@ void QtEventBus::publishLogMessage(const QString &message,
   publish(event);
 }
 
+void QtEventBus::publishNavigationRequest(const QString &locationString) {
+  emit navigationRequested(locationString);
+}
+
 } // namespace NovelMind::editor::qt

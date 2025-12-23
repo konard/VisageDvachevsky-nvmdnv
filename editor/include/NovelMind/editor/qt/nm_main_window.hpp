@@ -236,6 +236,7 @@ private:
   void focusNextDock(bool reverse = false);
   void showCommandPalette();
   void addDockContextActions(QDockWidget *dock);
+  void handleNavigationRequest(const QString &locationString);
   void toggleFocusMode(bool enabled);
   void applyFocusModeLayout();
   void updateStatusBarContext();

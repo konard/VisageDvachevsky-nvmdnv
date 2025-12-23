@@ -87,6 +87,11 @@ public:
   void publishLogMessage(const QString &message, const QString &source,
                          int level);
 
+  /**
+   * @brief Convenience method to publish navigation request
+   */
+  void publishNavigationRequest(const QString &locationString);
+
 signals:
   /**
    * @brief Emitted for all events
@@ -149,6 +154,13 @@ signals:
    * @brief Emitted on errors
    */
   void errorOccurred(const QString &message, const QString &details);
+
+  /**
+   * @brief Emitted when navigation to a location is requested
+   * @param locationString Location in format "StoryGraph:node_id" or
+   * "Script:path:line"
+   */
+  void navigationRequested(const QString &locationString);
 
 private:
   QtEventBus();
