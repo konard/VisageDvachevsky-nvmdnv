@@ -20,6 +20,7 @@ add_executable(unit_tests
     unit/test_lexer.cpp
     unit/test_parser.cpp
     unit/test_validator.cpp
+    unit/test_story_graph.cpp
     unit/test_animation.cpp
     unit/test_snapshot.cpp
     unit/test_fuzzing.cpp
@@ -32,6 +33,11 @@ target_link_libraries(unit_tests
         Catch2::Catch2WithMain
         novelmind_compiler_options
 )
+
+# Link Qt6::Core for test_story_graph.cpp (uses QHash, QList, QSet)
+if(Qt6_FOUND)
+    target_link_libraries(unit_tests PRIVATE Qt6::Core)
+endif()
 
 # Register unit tests
 include(CTest)

@@ -1,4 +1,5 @@
 #include "NovelMind/editor/qt/panels/nm_story_graph_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_story_graph_minimap.hpp"
 #include "NovelMind/editor/qt/nm_play_mode_controller.hpp"
 #include "NovelMind/editor/project_manager.hpp"
 
@@ -303,6 +304,21 @@ void NMStoryGraphPanel::setupContent() {
   m_view->setScene(m_scene);
 
   hLayout->addWidget(m_view, 1); // Graph view takes most space
+
+  // Create vertical layout for minimap on the right
+  auto *rightLayout = new QVBoxLayout();
+  rightLayout->setContentsMargins(0, 0, 0, 0);
+  rightLayout->setSpacing(4);
+
+  // Create minimap
+  m_minimap = new NMStoryGraphMinimap(m_contentWidget);
+  m_minimap->setGraphScene(m_scene);
+  m_minimap->setMainView(m_view);
+
+  rightLayout->addWidget(m_minimap);
+  rightLayout->addStretch(); // Push minimap to top
+
+  hLayout->addLayout(rightLayout);
 
   mainLayout->addLayout(hLayout);
 
