@@ -1,8 +1,10 @@
 #include "NovelMind/editor/qt/panels/nm_voice_manager_panel.hpp"
 #include "NovelMind/editor/project_manager.hpp"
 
+#include <QAudioOutput>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QTimer>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileDialog>
@@ -13,6 +15,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMediaPlayer>
 #include <QMenu>
 #include <QProgressBar>
 #include <QPushButton>
@@ -26,6 +29,10 @@
 #include <QVBoxLayout>
 #include <filesystem>
 
+#ifdef QT_DEBUG
+#include <QDebug>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace NovelMind::editor::qt {
@@ -33,17 +40,34 @@ namespace NovelMind::editor::qt {
 NMVoiceManagerPanel::NMVoiceManagerPanel(QWidget *parent)
     : NMDockPanel("Voice Manager", parent) {}
 
-NMVoiceManagerPanel::~NMVoiceManagerPanel() = default;
+NMVoiceManagerPanel::~NMVoiceManagerPanel() {
+  // Stop any ongoing playback before destruction
+  stopPlayback();
 
-void NMVoiceManagerPanel::onInitialize() { setupUI(); }
+  // Stop probing
+  if (m_probePlayer) {
+    m_probePlayer->stop();
+  }
+}
 
-void NMVoiceManagerPanel::onShutdown() { stopPlayback(); }
+void NMVoiceManagerPanel::onInitialize() {
+  setupUI();
+  setupMediaPlayer();
+}
+
+void NMVoiceManagerPanel::onShutdown() {
+  stopPlayback();
+
+  // Clean up probing
+  m_probeQueue.clear();
+  m_isProbing = false;
+  if (m_probePlayer) {
+    m_probePlayer->stop();
+  }
+}
 
 void NMVoiceManagerPanel::onUpdate([[maybe_unused]] double deltaTime) {
-  // Update playback progress if playing
-  if (m_isPlaying && m_playbackProgress) {
-    m_playbackPosition += deltaTime;
-  }
+  // Qt Multimedia handles position updates via signals, no manual update needed
 }
 
 void NMVoiceManagerPanel::setupUI() {
@@ -215,7 +239,7 @@ void NMVoiceManagerPanel::setupPreviewBar() {
   previewLayout->addWidget(m_playbackProgress, 1);
 
   m_durationLabel = new QLabel("0:00 / 0:00", previewWidget);
-  m_durationLabel->setMinimumWidth(80);
+  m_durationLabel->setMinimumWidth(100);
   previewLayout->addWidget(m_durationLabel);
 
   previewLayout->addWidget(new QLabel(tr("Vol:"), previewWidget));
@@ -233,16 +257,61 @@ void NMVoiceManagerPanel::setupPreviewBar() {
   }
 }
 
+void NMVoiceManagerPanel::setupMediaPlayer() {
+  // Create audio output with parent ownership
+  m_audioOutput = new QAudioOutput(this);
+  m_audioOutput->setVolume(static_cast<float>(m_volume));
+
+  // Create media player with parent ownership
+  m_mediaPlayer = new QMediaPlayer(this);
+  m_mediaPlayer->setAudioOutput(m_audioOutput);
+
+  // Connect signals once during initialization (not on each play)
+  connect(m_mediaPlayer, &QMediaPlayer::playbackStateChanged, this,
+          &NMVoiceManagerPanel::onPlaybackStateChanged);
+  connect(m_mediaPlayer, &QMediaPlayer::mediaStatusChanged, this,
+          &NMVoiceManagerPanel::onMediaStatusChanged);
+  connect(m_mediaPlayer, &QMediaPlayer::durationChanged, this,
+          &NMVoiceManagerPanel::onDurationChanged);
+  connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this,
+          &NMVoiceManagerPanel::onPositionChanged);
+  connect(m_mediaPlayer, &QMediaPlayer::errorOccurred, this,
+          &NMVoiceManagerPanel::onMediaErrorOccurred);
+
+  // Create separate player for duration probing
+  m_probePlayer = new QMediaPlayer(this);
+
+  // Connect probe player signals
+  connect(m_probePlayer, &QMediaPlayer::durationChanged, this,
+          &NMVoiceManagerPanel::onProbeDurationFinished);
+  connect(m_probePlayer, &QMediaPlayer::errorOccurred, this,
+          [this]([[maybe_unused]] QMediaPlayer::Error error,
+                 [[maybe_unused]] const QString &errorString) {
+            // On probe error, just move to next file
+            if (VERBOSE_LOGGING) {
+#ifdef QT_DEBUG
+              qDebug() << "Probe error for" << m_currentProbeFile << ":"
+                       << errorString;
+#endif
+            }
+            processNextDurationProbe();
+          });
+}
+
 void NMVoiceManagerPanel::scanProject() {
   m_voiceLines.clear();
   m_voiceFiles.clear();
   m_characters.clear();
+  m_durationCache.clear();  // Clear cache on full rescan
 
   scanScriptsForDialogue();
   scanVoiceFolder();
   autoMatchVoiceFiles();
   updateVoiceList();
   updateStatistics();
+
+  // Start async duration probing for voice files
+  startDurationProbing();
 }
 
 void NMVoiceManagerPanel::scanScriptsForDialogue() {
@@ -426,10 +495,8 @@ void NMVoiceManagerPanel::updateVoiceList() {
 
     item->setText(4, entry.actor);
     if (entry.duration > 0) {
-      int secs = static_cast<int>(entry.duration);
-      item->setText(5, QString("%1:%2")
-                           .arg(secs / 60)
-                           .arg(secs % 60, 2, 10, QChar('0')));
+      qint64 durationMs = static_cast<qint64>(entry.duration * 1000);
+      item->setText(5, formatDuration(durationMs));
     }
   }
 }
@@ -538,14 +605,26 @@ bool NMVoiceManagerPanel::importFromCsv(const QString &filePath) {
 }
 
 bool NMVoiceManagerPanel::playVoiceFile(const QString &filePath) {
-  if (filePath.isEmpty() || !QFile::exists(filePath)) {
+  if (filePath.isEmpty()) {
+    setPlaybackError(tr("No file specified"));
     return false;
   }
 
+  if (!QFile::exists(filePath)) {
+    setPlaybackError(tr("File not found: %1").arg(filePath));
+    return false;
+  }
+
+  // Stop any current playback first
   stopPlayback();
+
   m_currentlyPlayingFile = filePath;
+
+  // Set the source and play
+  m_mediaPlayer->setSource(QUrl::fromLocalFile(filePath));
+  m_mediaPlayer->play();
+
   m_isPlaying = true;
-  m_playbackPosition = 0.0;
 
   if (m_playBtn)
     m_playBtn->setEnabled(false);
@@ -556,16 +635,277 @@ bool NMVoiceManagerPanel::playVoiceFile(const QString &filePath) {
 }
 
 void NMVoiceManagerPanel::stopPlayback() {
+  if (m_mediaPlayer) {
+    m_mediaPlayer->stop();
+    m_mediaPlayer->setSource(QUrl());  // Clear source
+  }
+
   m_isPlaying = false;
   m_currentlyPlayingFile.clear();
-  m_playbackPosition = 0.0;
+  m_currentDuration = 0;
 
+  resetPlaybackUI();
+}
+
+void NMVoiceManagerPanel::resetPlaybackUI() {
   if (m_playBtn)
     m_playBtn->setEnabled(true);
   if (m_stopBtn)
     m_stopBtn->setEnabled(false);
-  if (m_playbackProgress)
+  if (m_playbackProgress) {
     m_playbackProgress->setValue(0);
+    m_playbackProgress->setRange(0, 1000);  // Reset to default range
+  }
+  if (m_durationLabel)
+    m_durationLabel->setText("0:00 / 0:00");
+}
+
+void NMVoiceManagerPanel::setPlaybackError(const QString &message) {
+  if (VERBOSE_LOGGING) {
+#ifdef QT_DEBUG
+    qDebug() << "Playback error:" << message;
+#endif
+  }
+
+  // Update status label with error
+  if (m_statsLabel) {
+    m_statsLabel->setStyleSheet("padding: 4px; color: #c44;");
+    m_statsLabel->setText(tr("Error: %1").arg(message));
+
+    // Reset style after 3 seconds
+    QTimer::singleShot(3000, this, [this]() {
+      if (m_statsLabel) {
+        m_statsLabel->setStyleSheet("padding: 4px; color: #888;");
+        updateStatistics();
+      }
+    });
+  }
+
+  emit playbackError(message);
+}
+
+QString NMVoiceManagerPanel::formatDuration(qint64 ms) const {
+  int totalSeconds = static_cast<int>(ms / 1000);
+  int minutes = totalSeconds / 60;
+  int seconds = totalSeconds % 60;
+  int tenths = static_cast<int>((ms % 1000) / 100);
+
+  return QString("%1:%2.%3")
+      .arg(minutes)
+      .arg(seconds, 2, 10, QChar('0'))
+      .arg(tenths);
+}
+
+// Qt Multimedia signal handlers
+void NMVoiceManagerPanel::onPlaybackStateChanged() {
+  if (!m_mediaPlayer) return;
+
+  QMediaPlayer::PlaybackState state = m_mediaPlayer->playbackState();
+
+  switch (state) {
+    case QMediaPlayer::StoppedState:
+      m_isPlaying = false;
+      // Only reset UI if we're not switching tracks
+      if (m_currentlyPlayingFile.isEmpty()) {
+        resetPlaybackUI();
+      }
+      break;
+
+    case QMediaPlayer::PlayingState:
+      m_isPlaying = true;
+      if (m_playBtn)
+        m_playBtn->setEnabled(false);
+      if (m_stopBtn)
+        m_stopBtn->setEnabled(true);
+      break;
+
+    case QMediaPlayer::PausedState:
+      // Currently not exposing pause, but handle it gracefully
+      break;
+  }
+}
+
+void NMVoiceManagerPanel::onMediaStatusChanged() {
+  if (!m_mediaPlayer) return;
+
+  QMediaPlayer::MediaStatus status = m_mediaPlayer->mediaStatus();
+
+  switch (status) {
+    case QMediaPlayer::EndOfMedia:
+      // Playback finished naturally
+      m_currentlyPlayingFile.clear();
+      resetPlaybackUI();
+      break;
+
+    case QMediaPlayer::InvalidMedia:
+      setPlaybackError(tr("Invalid or unsupported media format"));
+      m_currentlyPlayingFile.clear();
+      resetPlaybackUI();
+      break;
+
+    case QMediaPlayer::NoMedia:
+    case QMediaPlayer::LoadingMedia:
+    case QMediaPlayer::LoadedMedia:
+    case QMediaPlayer::StalledMedia:
+    case QMediaPlayer::BufferingMedia:
+    case QMediaPlayer::BufferedMedia:
+      // Normal states, no action needed
+      break;
+  }
+}
+
+void NMVoiceManagerPanel::onDurationChanged(qint64 duration) {
+  m_currentDuration = duration;
+
+  if (m_playbackProgress && duration > 0) {
+    m_playbackProgress->setRange(0, static_cast<int>(duration));
+  }
+
+  // Update duration label
+  if (m_durationLabel) {
+    qint64 position = m_mediaPlayer ? m_mediaPlayer->position() : 0;
+    m_durationLabel->setText(QString("%1 / %2")
+                                 .arg(formatDuration(position))
+                                 .arg(formatDuration(duration)));
+  }
+}
+
+void NMVoiceManagerPanel::onPositionChanged(qint64 position) {
+  if (m_playbackProgress && m_currentDuration > 0) {
+    m_playbackProgress->setValue(static_cast<int>(position));
+  }
+
+  if (m_durationLabel) {
+    m_durationLabel->setText(QString("%1 / %2")
+                                 .arg(formatDuration(position))
+                                 .arg(formatDuration(m_currentDuration)));
+  }
+}
+
+void NMVoiceManagerPanel::onMediaErrorOccurred() {
+  if (!m_mediaPlayer) return;
+
+  QString errorMsg = m_mediaPlayer->errorString();
+  if (errorMsg.isEmpty()) {
+    errorMsg = tr("Unknown playback error");
+  }
+
+  setPlaybackError(errorMsg);
+  m_currentlyPlayingFile.clear();
+  resetPlaybackUI();
+}
+
+// Async duration probing
+void NMVoiceManagerPanel::startDurationProbing() {
+  // Clear the probe queue and add all matched voice files
+  m_probeQueue.clear();
+
+  for (const auto &entry : m_voiceLines) {
+    if (entry.isMatched && !entry.voiceFilePath.isEmpty()) {
+      // Check if we have a valid cached duration
+      double cached = getCachedDuration(entry.voiceFilePath);
+      if (cached <= 0) {
+        m_probeQueue.enqueue(entry.voiceFilePath);
+      }
+    }
+  }
+
+  // Start processing
+  if (!m_probeQueue.isEmpty() && !m_isProbing) {
+    processNextDurationProbe();
+  }
+}
+
+void NMVoiceManagerPanel::processNextDurationProbe() {
+  if (m_probeQueue.isEmpty()) {
+    m_isProbing = false;
+    m_currentProbeFile.clear();
+    // Update the list with newly probed durations
+    updateDurationsInList();
+    return;
+  }
+
+  m_isProbing = true;
+  m_currentProbeFile = m_probeQueue.dequeue();
+
+  if (!m_probePlayer) {
+    m_isProbing = false;
+    return;
+  }
+
+  m_probePlayer->setSource(QUrl::fromLocalFile(m_currentProbeFile));
+}
+
+void NMVoiceManagerPanel::onProbeDurationFinished() {
+  if (!m_probePlayer || m_currentProbeFile.isEmpty()) {
+    processNextDurationProbe();
+    return;
+  }
+
+  qint64 durationMs = m_probePlayer->duration();
+  if (durationMs > 0) {
+    double durationSec = static_cast<double>(durationMs) / 1000.0;
+    cacheDuration(m_currentProbeFile, durationSec);
+
+    // Update the voice line entry with the duration
+    for (auto it = m_voiceLines.begin(); it != m_voiceLines.end(); ++it) {
+      if (it->voiceFilePath == m_currentProbeFile) {
+        it->duration = durationSec;
+        break;
+      }
+    }
+  }
+
+  // Continue with next file
+  processNextDurationProbe();
+}
+
+double NMVoiceManagerPanel::getCachedDuration(const QString &filePath) const {
+  auto it = m_durationCache.find(filePath.toStdString());
+  if (it == m_durationCache.end()) {
+    return 0.0;
+  }
+
+  // Check if file has been modified
+  QFileInfo fileInfo(filePath);
+  if (!fileInfo.exists()) {
+    return 0.0;
+  }
+
+  qint64 currentMtime = fileInfo.lastModified().toMSecsSinceEpoch();
+  if (currentMtime != it->second.mtime) {
+    return 0.0;  // Cache invalidated
+  }
+
+  return it->second.duration;
+}
+
+void NMVoiceManagerPanel::cacheDuration(const QString &filePath, double duration) {
+  QFileInfo fileInfo(filePath);
+  DurationCacheEntry entry;
+  entry.duration = duration;
+  entry.mtime = fileInfo.lastModified().toMSecsSinceEpoch();
+
+  m_durationCache[filePath.toStdString()] = entry;
+}
+
+void NMVoiceManagerPanel::updateDurationsInList() {
+  if (!m_voiceTree) return;
+
+  // Update durations in the tree widget items
+  for (int i = 0; i < m_voiceTree->topLevelItemCount(); ++i) {
+    auto *item = m_voiceTree->topLevelItem(i);
+    if (!item) continue;
+
+    QString dialogueId = item->data(0, Qt::UserRole).toString();
+    if (m_voiceLines.contains(dialogueId)) {
+      const auto &entry = m_voiceLines[dialogueId];
+      if (entry.duration > 0) {
+        qint64 durationMs = static_cast<qint64>(entry.duration * 1000);
+        item->setText(5, formatDuration(durationMs));
+      }
+    }
+  }
 }
 
 void NMVoiceManagerPanel::onScanClicked() { scanProject(); }
@@ -614,6 +954,12 @@ void NMVoiceManagerPanel::onLineSelected(QTreeWidgetItem *item, int column) {
   }
 
   QString dialogueId = item->data(0, Qt::UserRole).toString();
+
+  // Stop current playback when selecting a new line
+  if (m_isPlaying) {
+    stopPlayback();
+  }
+
   if (m_voiceLines.contains(dialogueId) && m_voiceLines[dialogueId].isMatched) {
     m_playBtn->setEnabled(true);
   } else {
@@ -640,6 +986,9 @@ void NMVoiceManagerPanel::onShowOnlyUnmatched(bool checked) {
 
 void NMVoiceManagerPanel::onVolumeChanged(int value) {
   m_volume = value / 100.0;
+  if (m_audioOutput) {
+    m_audioOutput->setVolume(static_cast<float>(m_volume));
+  }
 }
 
 void NMVoiceManagerPanel::onAssignVoiceFile() {
@@ -663,6 +1012,15 @@ void NMVoiceManagerPanel::onAssignVoiceFile() {
   if (!filePath.isEmpty()) {
     m_voiceLines[dialogueId].voiceFilePath = filePath;
     m_voiceLines[dialogueId].isMatched = true;
+
+    // Queue duration probe for this file
+    if (!m_probeQueue.contains(filePath)) {
+      m_probeQueue.enqueue(filePath);
+      if (!m_isProbing) {
+        processNextDurationProbe();
+      }
+    }
+
     updateVoiceList();
     updateStatistics();
     emit voiceFileChanged(dialogueId, filePath);
@@ -683,6 +1041,7 @@ void NMVoiceManagerPanel::onClearVoiceFile() {
   m_voiceLines[dialogueId].voiceFilePath.clear();
   m_voiceLines[dialogueId].isMatched = false;
   m_voiceLines[dialogueId].isVerified = false;
+  m_voiceLines[dialogueId].duration = 0.0;
   updateVoiceList();
   updateStatistics();
   emit voiceFileChanged(dialogueId, QString());

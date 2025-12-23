@@ -4,7 +4,7 @@
 # replacing the previous ImGui/SDL2 implementation.
 
 # Find Qt6
-find_package(Qt6 COMPONENTS Widgets Core Gui Svg OpenGLWidgets QUIET)
+find_package(Qt6 COMPONENTS Widgets Core Gui Svg OpenGLWidgets Multimedia QUIET)
 
 if(NOT Qt6_FOUND)
     message(STATUS "NovelMind Editor: Qt6 not found - Editor will not be built")
@@ -177,6 +177,7 @@ target_link_libraries(novelmind_editor
         Qt6::Gui
         Qt6::Svg
         Qt6::OpenGLWidgets
+        Qt6::Multimedia
     PRIVATE
         novelmind_compiler_options
 )
@@ -199,6 +200,7 @@ target_link_libraries(novelmind_editor_app
         Qt6::Gui
         Qt6::Svg
         Qt6::OpenGLWidgets
+        Qt6::Multimedia
         novelmind_compiler_options
 )
 
