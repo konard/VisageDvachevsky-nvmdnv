@@ -1,13 +1,18 @@
 #include "NovelMind/editor/qt/panels/nm_timeline_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_keyframe_item.hpp"
 #include "NovelMind/editor/qt/nm_icon_manager.hpp"
 
 #include <QBrush>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QGraphicsRectItem>
 #include <QGraphicsScene>
 #include <QGraphicsTextItem>
 #include <QGraphicsView>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QListWidget>
 #include <QPen>
 #include <QPushButton>
 #include <QSlider>
@@ -21,11 +26,13 @@ namespace NovelMind::editor::qt {
 // TimelineTrack Implementation
 // =============================================================================
 
-void TimelineTrack::addKeyframe(int frame, const QVariant &value) {
+void TimelineTrack::addKeyframe(int frame, const QVariant &value,
+                                EasingType easing) {
   // Check if keyframe already exists
   for (auto &kf : keyframes) {
     if (kf.frame == frame) {
       kf.value = value;
+      kf.easing = easing;
       return;
     }
   }
@@ -34,7 +41,7 @@ void TimelineTrack::addKeyframe(int frame, const QVariant &value) {
   Keyframe newKeyframe;
   newKeyframe.frame = frame;
   newKeyframe.value = value;
-  newKeyframe.interpolation = "linear";
+  newKeyframe.easing = easing;
   keyframes.append(newKeyframe);
 
   // Sort keyframes by frame
@@ -50,12 +57,73 @@ void TimelineTrack::removeKeyframe(int frame) {
       keyframes.end());
 }
 
+void TimelineTrack::moveKeyframe(int fromFrame, int toFrame) {
+  Keyframe *kf = getKeyframe(fromFrame);
+  if (kf && fromFrame != toFrame) {
+    // Store keyframe data
+    QVariant value = kf->value;
+    EasingType easing = kf->easing;
+    bool selected = kf->isSelected;
+
+    // Remove old keyframe
+    removeKeyframe(fromFrame);
+
+    // Add at new position
+    addKeyframe(toFrame, value, easing);
+
+    // Restore selection state
+    Keyframe *newKf = getKeyframe(toFrame);
+    if (newKf) {
+      newKf->isSelected = selected;
+    }
+  }
+}
+
 Keyframe *TimelineTrack::getKeyframe(int frame) {
   for (auto &kf : keyframes) {
     if (kf.frame == frame)
       return &kf;
   }
   return nullptr;
+}
+
+Keyframe TimelineTrack::interpolate(int frame) const {
+  // Simple implementation - return nearest keyframe
+  // Full interpolation would consider easing functions
+  if (keyframes.isEmpty()) {
+    return Keyframe();
+  }
+
+  for (const auto &kf : keyframes) {
+    if (kf.frame == frame)
+      return kf;
+  }
+
+  return keyframes.first();
+}
+
+QList<Keyframe *> TimelineTrack::selectedKeyframes() {
+  QList<Keyframe *> selected;
+  for (auto &kf : keyframes) {
+    if (kf.isSelected) {
+      selected.append(&kf);
+    }
+  }
+  return selected;
+}
+
+void TimelineTrack::selectKeyframesInRange(int startFrame, int endFrame) {
+  for (auto &kf : keyframes) {
+    if (kf.frame >= startFrame && kf.frame <= endFrame) {
+      kf.isSelected = true;
+    }
+  }
+}
+
+void TimelineTrack::clearSelection() {
+  for (auto &kf : keyframes) {
+    kf.isSelected = false;
+  }
 }
 
 // =============================================================================
@@ -190,6 +258,10 @@ void NMTimelinePanel::setupTrackView() {
   m_timelineView->setObjectName("TimelineView");
   m_timelineView->setAlignment(Qt::AlignLeft | Qt::AlignTop);
   m_timelineView->setDragMode(QGraphicsView::ScrollHandDrag);
+  m_timelineView->setFocusPolicy(Qt::StrongFocus);
+
+  // Install event filter for keyboard handling
+  m_timelineView->installEventFilter(this);
 
   // Create playhead
   m_playheadItem =
@@ -367,6 +439,9 @@ void NMTimelinePanel::renderTracks() {
     }
   }
 
+  // Clear keyframe item map
+  m_keyframeItems.clear();
+
   int y = TIMELINE_MARGIN;
   int trackIndex = 0;
 
@@ -401,13 +476,42 @@ void NMTimelinePanel::renderTracks() {
     nameLabel->setPos(8, y + 8);
     nameLabel->setDefaultTextColor(QColor("#e0e0e0"));
 
-    // Draw keyframes
+    // Draw keyframes using custom items
     for (const Keyframe &kf : track->keyframes) {
       int kfX = frameToX(kf.frame);
-      QGraphicsEllipseItem *kfItem = m_timelineScene->addEllipse(
-          kfX - 4, y + TRACK_HEIGHT / 2 - 4, 8, 8,
-          QPen(track->color.lighter(150), 2), QBrush(track->color));
-      kfItem->setZValue(10);
+
+      // Create custom keyframe item
+      NMKeyframeItem *kfItem =
+          new NMKeyframeItem(trackIndex, kf.frame, track->color);
+      kfItem->setPos(kfX, y + TRACK_HEIGHT / 2);
+      kfItem->setSnapToGrid(m_snapToGrid);
+      kfItem->setGridSize(m_gridSize);
+
+      // Set coordinate conversion functions
+      kfItem->setFrameConverter([this](int x) { return this->xToFrame(x); },
+                                 [this](int f) { return this->frameToX(f); });
+
+      // Connect signals
+      connect(kfItem, &NMKeyframeItem::clicked, this,
+              &NMTimelinePanel::onKeyframeClicked);
+      connect(kfItem, &NMKeyframeItem::moved, this,
+              &NMTimelinePanel::onKeyframeMoved);
+      connect(kfItem, &NMKeyframeItem::doubleClicked, this,
+              &NMTimelinePanel::onKeyframeDoubleClicked);
+
+      // Add to scene
+      m_timelineScene->addItem(kfItem);
+
+      // Store in map
+      KeyframeId id;
+      id.trackIndex = trackIndex;
+      id.frame = kf.frame;
+      m_keyframeItems[id] = kfItem;
+
+      // Restore selection state
+      if (m_selectedKeyframes.contains(id)) {
+        kfItem->setSelected(true);
+      }
     }
 
     y += TRACK_HEIGHT;
@@ -426,6 +530,228 @@ int NMTimelinePanel::frameToX(int frame) const {
 
 int NMTimelinePanel::xToFrame(int x) const {
   return (x - TRACK_HEADER_WIDTH) / m_pixelsPerFrame;
+}
+
+// =============================================================================
+// Selection Management
+// =============================================================================
+
+void NMTimelinePanel::selectKeyframe(const KeyframeId &id, bool additive) {
+  if (!additive) {
+    // Clear previous selection
+    m_selectedKeyframes.clear();
+  }
+
+  if (m_selectedKeyframes.contains(id)) {
+    // Toggle if already selected in additive mode
+    if (additive) {
+      m_selectedKeyframes.remove(id);
+    }
+  } else {
+    m_selectedKeyframes.insert(id);
+  }
+
+  updateSelectionVisuals();
+}
+
+void NMTimelinePanel::clearSelection() {
+  m_selectedKeyframes.clear();
+  updateSelectionVisuals();
+}
+
+void NMTimelinePanel::updateSelectionVisuals() {
+  for (auto it = m_keyframeItems.begin(); it != m_keyframeItems.end(); ++it) {
+    bool selected = m_selectedKeyframes.contains(it.key());
+    it.value()->setSelected(selected);
+  }
+
+  // Update data model selection state
+  int trackIndex = 0;
+  for (auto trackIt = m_tracks.begin(); trackIt != m_tracks.end();
+       ++trackIt, ++trackIndex) {
+    TimelineTrack *track = trackIt.value();
+    for (auto &kf : track->keyframes) {
+      KeyframeId id;
+      id.trackIndex = trackIndex;
+      id.frame = kf.frame;
+      kf.isSelected = m_selectedKeyframes.contains(id);
+    }
+  }
+}
+
+// =============================================================================
+// Keyframe Event Handlers
+// =============================================================================
+
+void NMTimelinePanel::onKeyframeClicked(bool additiveSelection,
+                                        const KeyframeId &id) {
+  selectKeyframe(id, additiveSelection);
+}
+
+void NMTimelinePanel::onKeyframeMoved(int oldFrame, int newFrame,
+                                      int trackIndex) {
+  // Find the track
+  int currentTrackIndex = 0;
+  TimelineTrack *targetTrack = nullptr;
+
+  for (auto it = m_tracks.begin(); it != m_tracks.end();
+       ++it, ++currentTrackIndex) {
+    if (currentTrackIndex == trackIndex) {
+      targetTrack = it.value();
+      break;
+    }
+  }
+
+  if (!targetTrack)
+    return;
+
+  // Move keyframe in data model
+  targetTrack->moveKeyframe(oldFrame, newFrame);
+
+  // Update selection to new position
+  KeyframeId oldId;
+  oldId.trackIndex = trackIndex;
+  oldId.frame = oldFrame;
+
+  KeyframeId newId;
+  newId.trackIndex = trackIndex;
+  newId.frame = newFrame;
+
+  if (m_selectedKeyframes.contains(oldId)) {
+    m_selectedKeyframes.remove(oldId);
+    m_selectedKeyframes.insert(newId);
+  }
+
+  // Re-render to update positions
+  renderTracks();
+
+  emit keyframeMoved(QString::number(trackIndex), oldFrame, newFrame);
+}
+
+void NMTimelinePanel::onKeyframeDoubleClicked(int trackIndex, int frame) {
+  showEasingDialog(trackIndex, frame);
+}
+
+// =============================================================================
+// Easing Dialog
+// =============================================================================
+
+void NMTimelinePanel::showEasingDialog(int trackIndex, int frame) {
+  // Find the track and keyframe
+  int currentTrackIndex = 0;
+  TimelineTrack *targetTrack = nullptr;
+  Keyframe *targetKeyframe = nullptr;
+
+  for (auto it = m_tracks.begin(); it != m_tracks.end();
+       ++it, ++currentTrackIndex) {
+    if (currentTrackIndex == trackIndex) {
+      targetTrack = it.value();
+      targetKeyframe = targetTrack->getKeyframe(frame);
+      break;
+    }
+  }
+
+  if (!targetTrack || !targetKeyframe)
+    return;
+
+  // Create easing selection dialog
+  QDialog dialog(this);
+  dialog.setWindowTitle("Select Easing Type");
+  QVBoxLayout *layout = new QVBoxLayout(&dialog);
+
+  QListWidget *easingList = new QListWidget(&dialog);
+  easingList->addItem("Linear");
+  easingList->addItem("Ease In");
+  easingList->addItem("Ease Out");
+  easingList->addItem("Ease In Out");
+  easingList->addItem("Ease In Quad");
+  easingList->addItem("Ease Out Quad");
+  easingList->addItem("Ease In Out Quad");
+  easingList->addItem("Ease In Cubic");
+  easingList->addItem("Ease Out Cubic");
+  easingList->addItem("Ease In Out Cubic");
+  easingList->addItem("Ease In Elastic");
+  easingList->addItem("Ease Out Elastic");
+  easingList->addItem("Ease In Bounce");
+  easingList->addItem("Ease Out Bounce");
+  easingList->addItem("Step");
+  easingList->addItem("Custom");
+
+  // Select current easing
+  easingList->setCurrentRow(static_cast<int>(targetKeyframe->easing));
+
+  layout->addWidget(easingList);
+
+  QDialogButtonBox *buttonBox =
+      new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+  layout->addWidget(buttonBox);
+
+  if (dialog.exec() == QDialog::Accepted) {
+    int selectedIndex = easingList->currentRow();
+    if (selectedIndex >= 0 &&
+        selectedIndex < static_cast<int>(EasingType::Custom) + 1) {
+      targetKeyframe->easing = static_cast<EasingType>(selectedIndex);
+      emit keyframeEasingChanged(targetTrack->name, frame,
+                                  targetKeyframe->easing);
+    }
+  }
+}
+
+// =============================================================================
+// Delete Selected Keyframes
+// =============================================================================
+
+void NMTimelinePanel::deleteSelectedKeyframes() {
+  if (m_selectedKeyframes.isEmpty())
+    return;
+
+  // Delete keyframes from data model
+  int trackIndex = 0;
+  for (auto trackIt = m_tracks.begin(); trackIt != m_tracks.end();
+       ++trackIt, ++trackIndex) {
+    TimelineTrack *track = trackIt.value();
+
+    // Collect frames to delete for this track
+    QVector<int> framesToDelete;
+    for (const KeyframeId &id : m_selectedKeyframes) {
+      if (id.trackIndex == trackIndex) {
+        framesToDelete.append(id.frame);
+      }
+    }
+
+    // Delete the keyframes
+    for (int frame : framesToDelete) {
+      track->removeKeyframe(frame);
+      emit keyframeDeleted(track->name, frame);
+    }
+  }
+
+  // Clear selection
+  m_selectedKeyframes.clear();
+
+  // Re-render
+  renderTracks();
+}
+
+// =============================================================================
+// Event Filter for Keyboard
+// =============================================================================
+
+bool NMTimelinePanel::eventFilter(QObject *obj, QEvent *event) {
+  if (event->type() == QEvent::KeyPress) {
+    QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+
+    if (keyEvent->key() == Qt::Key_Delete ||
+        keyEvent->key() == Qt::Key_Backspace) {
+      deleteSelectedKeyframes();
+      return true;
+    }
+  }
+
+  return NMDockPanel::eventFilter(obj, event);
 }
 
 } // namespace NovelMind::editor::qt

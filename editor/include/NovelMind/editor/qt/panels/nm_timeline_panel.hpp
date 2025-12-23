@@ -19,11 +19,15 @@
 
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QHash>
 #include <QMap>
+#include <QSet>
 #include <QToolBar>
 #include <QVector>
 #include <QWidget>
 #include <QUndoStack>
+
+#include "NovelMind/editor/qt/panels/nm_keyframe_item.hpp"
 
 class QToolBar;
 class QPushButton;
@@ -152,6 +156,12 @@ public:
    */
   void onUpdate(double deltaTime) override;
 
+protected:
+  /**
+   * @brief Handle keyboard events for timeline
+   */
+  bool eventFilter(QObject *obj, QEvent *event) override;
+
 signals:
   /**
    * @brief Emitted when playback frame changes
@@ -168,24 +178,11 @@ signals:
    */
   void playbackStateChanged(bool playing);
 
+signals:
   /**
    * @brief Synchronize with play-in-editor mode
    */
   void syncWithPlayMode(bool enabled);
-
-  /**
-   * @brief Get/set snap to grid
-   */
-  void setSnapToGrid(bool enabled);
-  [[nodiscard]] bool snapToGrid() const { return m_snapToGrid; }
-
-  /**
-   * @brief Get/set grid size in frames
-   */
-  void setGridSize(int frames);
-  [[nodiscard]] int gridSize() const { return m_gridSize; }
-
-signals:
   void keyframeAdded(const QString &trackName, int frame);
   void keyframeDeleted(const QString &trackName, int frame);
   void keyframeMoved(const QString &trackName, int fromFrame, int toFrame);
@@ -273,6 +270,18 @@ public slots:
    */
   void onPlayModeFrameChanged(int frame);
 
+  /**
+   * @brief Get/set snap to grid
+   */
+  void setSnapToGrid(bool enabled);
+  [[nodiscard]] bool snapToGrid() const { return m_snapToGrid; }
+
+  /**
+   * @brief Get/set grid size in frames
+   */
+  void setGridSize(int frames);
+  [[nodiscard]] int gridSize() const { return m_gridSize; }
+
 private:
   void setupUI();
   void setupToolbar();
@@ -285,6 +294,19 @@ private:
 
   int frameToX(int frame) const;
   int xToFrame(int x) const;
+
+  // Selection management
+  void selectKeyframe(const KeyframeId &id, bool additive);
+  void clearSelection();
+  void updateSelectionVisuals();
+
+  // Keyframe item event handlers
+  void onKeyframeClicked(bool additiveSelection, const KeyframeId &id);
+  void onKeyframeMoved(int oldFrame, int newFrame, int trackIndex);
+  void onKeyframeDoubleClicked(int trackIndex, int frame);
+
+  // Easing dialog
+  void showEasingDialog(int trackIndex, int frame);
 
   // UI Components
   QToolBar *m_toolbar = nullptr;
@@ -342,6 +364,10 @@ private:
 
   // Undo stack
   QUndoStack *m_undoStack = nullptr;
+
+  // Selection state
+  QSet<KeyframeId> m_selectedKeyframes;
+  QMap<KeyframeId, NMKeyframeItem *> m_keyframeItems;
 
   static constexpr int TRACK_HEIGHT = 32;
   static constexpr int TRACK_HEADER_WIDTH = 150;
