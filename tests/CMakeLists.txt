@@ -50,6 +50,7 @@ if(NOVELMIND_BUILD_EDITOR)
         integration/test_editor_runtime.cpp
         integration/test_editor_settings.cpp
         integration/test_asset_browser.cpp
+        integration/test_voice_manager.cpp
     )
 
     target_link_libraries(integration_tests
