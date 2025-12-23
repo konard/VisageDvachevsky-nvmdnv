@@ -1,0 +1,9 @@
+// node_2
+scene node_2 {
+    say "New scene"
+
+    // @graph-begin
+    // Auto-generated transitions from Story Graph
+    goto node_3
+    // @graph-end
+}

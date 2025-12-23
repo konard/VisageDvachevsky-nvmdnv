@@ -1,0 +1,13 @@
+{
+    "name": "Branching Story",
+    "version": "1.0.0",
+    "author": "",
+    "description": "A template for branching narrative games",
+    "startScene": "intro",
+    "defaultResolution": {
+        "width": 1920,
+        "height": 1080
+    },
+    "locales": ["en"],
+    "defaultLocale": "en"
+}

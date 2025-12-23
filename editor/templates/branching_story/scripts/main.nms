@@ -1,0 +1,109 @@
+// Branching Story Template
+// Features multiple paths and endings
+
+character Protagonist(name="Protagonist", color="#4A90D9")
+character Narrator(name="", color="#AAAAAA")
+
+// Introduction
+scene intro {
+    show background "bg_start"
+    transition fade 1.0
+
+    say Narrator "Your story begins here..."
+
+    show Protagonist at center
+
+    say Protagonist "Where should I go?"
+
+    choice {
+        "Path A" -> goto path_a
+        "Path B" -> goto path_b
+        "Path C" -> goto path_c
+    }
+}
+
+// Path A branch
+scene path_a {
+    set path = "a"
+    say Narrator "You chose Path A."
+
+    choice {
+        "Continue forward" -> goto path_a_1
+        "Turn back" -> goto intro
+    }
+}
+
+scene path_a_1 {
+    say Narrator "Path A continues..."
+
+    // Add more content here
+
+    goto ending_check
+}
+
+// Path B branch
+scene path_b {
+    set path = "b"
+    say Narrator "You chose Path B."
+
+    choice {
+        "Explore further" -> goto path_b_1
+        "Return to start" -> goto intro
+    }
+}
+
+scene path_b_1 {
+    say Narrator "Path B continues..."
+
+    // Add more content here
+
+    goto ending_check
+}
+
+// Path C branch
+scene path_c {
+    set path = "c"
+    say Narrator "You chose Path C."
+
+    choice {
+        "Press on" -> goto path_c_1
+        "Go back" -> goto intro
+    }
+}
+
+scene path_c_1 {
+    say Narrator "Path C continues..."
+
+    // Add more content here
+
+    goto ending_check
+}
+
+// Ending determination
+scene ending_check {
+    if path == "a" {
+        goto ending_a
+    } else if path == "b" {
+        goto ending_b
+    } else {
+        goto ending_c
+    }
+}
+
+scene ending_a {
+    say Narrator "Ending A - Path of Adventure"
+    transition fade 2.0
+    say Narrator "THE END"
+}
+
+scene ending_b {
+    say Narrator "Ending B - Path of Mystery"
+    transition fade 2.0
+    say Narrator "THE END"
+}
+
+scene ending_c {
+    say Narrator "Ending C - Path of Discovery"
+    transition fade 2.0
+    say Narrator "THE END"
+}

@@ -1,0 +1,13 @@
+{
+    "name": "New Project",
+    "version": "1.0.0",
+    "author": "",
+    "description": "",
+    "startScene": "main",
+    "defaultResolution": {
+        "width": 1920,
+        "height": 1080
+    },
+    "locales": ["en"],
+    "defaultLocale": "en"
+}

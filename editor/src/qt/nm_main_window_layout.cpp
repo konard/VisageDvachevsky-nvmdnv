@@ -1,0 +1,797 @@
+#include "NovelMind/editor/qt/nm_main_window.hpp"
+#include "NovelMind/editor/qt/panels/nm_asset_browser_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_build_settings_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_console_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_curve_editor_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_debug_overlay_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_diagnostics_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_hierarchy_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_inspector_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_issues_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_localization_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_play_toolbar_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_scene_palette_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_scene_view_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_script_doc_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_script_editor_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_story_graph_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_timeline_panel.hpp"
+#include "NovelMind/editor/qt/panels/nm_voice_manager_panel.hpp"
+
+#include <QDockWidget>
+#include <QEvent>
+#include <QHash>
+#include <QSettings>
+#include <QStyle>
+
+namespace NovelMind::editor::qt {
+
+void NMMainWindow::createDefaultLayout() {
+  applyLayoutPreset(LayoutPreset::Scene);
+}
+
+void NMMainWindow::focusNextDock(bool reverse) {
+  QList<QDockWidget *> docks = {
+      m_sceneViewPanel,   m_storyGraphPanel,   m_inspectorPanel,
+      m_consolePanel,     m_assetBrowserPanel, m_hierarchyPanel,
+      m_scriptEditorPanel, m_scriptDocPanel,   m_playToolbarPanel,
+      m_debugOverlayPanel, m_voiceManagerPanel, m_localizationPanel,
+      m_timelinePanel,     m_curveEditorPanel,  m_buildSettingsPanel};
+
+  QList<QDockWidget *> visible;
+  for (auto *dock : docks) {
+    if (dock && dock->isVisible()) {
+      visible << dock;
+    }
+  }
+  if (visible.isEmpty()) {
+    return;
+  }
+
+  qsizetype idx = 0;
+  if (m_lastFocusedDock) {
+    idx = visible.indexOf(m_lastFocusedDock);
+  }
+  if (idx < 0) {
+    idx = 0;
+  }
+
+  const qsizetype size = visible.size();
+  idx = reverse ? (idx - 1 + size) % size : (idx + 1) % size;
+
+  auto *target = visible.at(idx);
+  if (!target) {
+    return;
+  }
+  target->raise();
+  target->setFocus(Qt::OtherFocusReason);
+  target->setProperty("focusedDock", true);
+  target->style()->unpolish(target);
+  target->style()->polish(target);
+  m_lastFocusedDock = target;
+}
+
+bool NMMainWindow::eventFilter(QObject *watched, QEvent *event) {
+  if (event->type() == QEvent::FocusIn) {
+    if (auto *dock = qobject_cast<QDockWidget *>(watched)) {
+      if (m_lastFocusedDock && m_lastFocusedDock != dock) {
+        m_lastFocusedDock->setProperty("focusedDock", false);
+        m_lastFocusedDock->style()->unpolish(m_lastFocusedDock);
+        m_lastFocusedDock->style()->polish(m_lastFocusedDock);
+      }
+      m_lastFocusedDock = dock;
+      m_lastFocusedDock->setProperty("focusedDock", true);
+      m_lastFocusedDock->style()->unpolish(m_lastFocusedDock);
+      m_lastFocusedDock->style()->polish(m_lastFocusedDock);
+    }
+  }
+  return QMainWindow::eventFilter(watched, event);
+}
+
+void NMMainWindow::applyLayoutPreset(LayoutPreset preset) {
+  QList<QDockWidget *> docks = {
+      m_sceneViewPanel,      m_storyGraphPanel,   m_inspectorPanel,
+      m_consolePanel,        m_assetBrowserPanel, m_scenePalettePanel,
+      m_hierarchyPanel,      m_scriptEditorPanel, m_scriptDocPanel,
+      m_playToolbarPanel,    m_debugOverlayPanel, m_issuesPanel,
+      m_diagnosticsPanel,    m_voiceManagerPanel, m_localizationPanel,
+      m_timelinePanel,       m_curveEditorPanel,  m_buildSettingsPanel};
+
+  for (auto *dock : docks) {
+    if (!dock) {
+      continue;
+    }
+    dock->setFloating(false);
+    dock->hide();
+    removeDockWidget(dock);
+  }
+
+  setCentralWidget(nullptr);
+
+  if (m_playToolbarPanel) {
+    addDockWidget(Qt::TopDockWidgetArea, m_playToolbarPanel);
+    m_playToolbarPanel->show();
+  }
+
+  switch (preset) {
+  case LayoutPreset::Story: {
+    if (m_storyGraphPanel)
+      m_storyGraphPanel->show();
+    if (m_inspectorPanel)
+      m_inspectorPanel->show();
+    if (m_consolePanel)
+      m_consolePanel->show();
+    if (m_issuesPanel)
+      m_issuesPanel->show();
+    if (m_diagnosticsPanel)
+      m_diagnosticsPanel->show();
+    if (m_voiceManagerPanel)
+      m_voiceManagerPanel->show();
+    if (m_localizationPanel)
+      m_localizationPanel->show();
+
+    if (m_storyGraphPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_storyGraphPanel);
+      m_storyGraphPanel->raise();
+    }
+
+    if (m_inspectorPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_inspectorPanel);
+    }
+    if (m_debugOverlayPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_debugOverlayPanel);
+    }
+    if (m_voiceManagerPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_voiceManagerPanel);
+    }
+    if (m_localizationPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_localizationPanel);
+    }
+    if (m_inspectorPanel && m_debugOverlayPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_debugOverlayPanel);
+    }
+    if (m_inspectorPanel && m_voiceManagerPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_voiceManagerPanel);
+    }
+    if (m_inspectorPanel && m_localizationPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_localizationPanel);
+    }
+
+    if (m_consolePanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_consolePanel);
+    }
+    if (m_issuesPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_issuesPanel);
+    }
+    if (m_diagnosticsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_diagnosticsPanel);
+    }
+    if (m_consolePanel && m_issuesPanel) {
+      tabifyDockWidget(m_consolePanel, m_issuesPanel);
+      m_consolePanel->raise();
+    }
+    if (m_consolePanel && m_diagnosticsPanel) {
+      tabifyDockWidget(m_consolePanel, m_diagnosticsPanel);
+    }
+
+    if (m_inspectorPanel) {
+      resizeDocks({m_inspectorPanel}, {300}, Qt::Horizontal);
+    }
+    if (m_consolePanel) {
+      resizeDocks({m_consolePanel}, {200}, Qt::Vertical);
+    }
+    break;
+  }
+  case LayoutPreset::Scene: {
+    if (m_sceneViewPanel)
+      m_sceneViewPanel->show();
+    if (m_inspectorPanel)
+      m_inspectorPanel->show();
+    if (m_assetBrowserPanel)
+      m_assetBrowserPanel->show();
+    if (m_scenePalettePanel)
+      m_scenePalettePanel->show();
+    if (m_hierarchyPanel)
+      m_hierarchyPanel->show();
+
+    if (m_scenePalettePanel) {
+      addDockWidget(Qt::LeftDockWidgetArea, m_scenePalettePanel);
+    }
+    if (m_hierarchyPanel) {
+      addDockWidget(Qt::LeftDockWidgetArea, m_hierarchyPanel);
+    }
+    if (m_scenePalettePanel && m_hierarchyPanel) {
+      tabifyDockWidget(m_scenePalettePanel, m_hierarchyPanel);
+      m_scenePalettePanel->raise();
+    }
+
+    if (m_sceneViewPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_sceneViewPanel);
+      m_sceneViewPanel->raise();
+    }
+
+    if (m_inspectorPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_inspectorPanel);
+    }
+
+    if (m_assetBrowserPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_assetBrowserPanel);
+    }
+
+    if (m_hierarchyPanel) {
+      resizeDocks({m_hierarchyPanel}, {220}, Qt::Horizontal);
+    }
+    if (m_inspectorPanel) {
+      resizeDocks({m_inspectorPanel}, {300}, Qt::Horizontal);
+    }
+    if (m_assetBrowserPanel) {
+      resizeDocks({m_assetBrowserPanel}, {200}, Qt::Vertical);
+    }
+    break;
+  }
+  case LayoutPreset::Script: {
+    if (m_scriptEditorPanel)
+      m_scriptEditorPanel->show();
+    if (m_storyGraphPanel)
+      m_storyGraphPanel->show();
+    if (m_scriptDocPanel)
+      m_scriptDocPanel->show();
+    if (m_issuesPanel)
+      m_issuesPanel->show();
+    if (m_diagnosticsPanel)
+      m_diagnosticsPanel->show();
+    if (m_voiceManagerPanel)
+      m_voiceManagerPanel->show();
+    if (m_localizationPanel)
+      m_localizationPanel->show();
+
+    if (m_scriptEditorPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_scriptEditorPanel);
+    }
+    if (m_storyGraphPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_storyGraphPanel);
+    }
+    if (m_scriptEditorPanel && m_storyGraphPanel) {
+      tabifyDockWidget(m_scriptEditorPanel, m_storyGraphPanel);
+      m_scriptEditorPanel->raise();
+    }
+
+    if (m_scriptDocPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_scriptDocPanel);
+    }
+    if (m_voiceManagerPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_voiceManagerPanel);
+    }
+    if (m_localizationPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_localizationPanel);
+    }
+    if (m_scriptDocPanel && m_voiceManagerPanel) {
+      tabifyDockWidget(m_scriptDocPanel, m_voiceManagerPanel);
+    }
+    if (m_scriptDocPanel && m_localizationPanel) {
+      tabifyDockWidget(m_scriptDocPanel, m_localizationPanel);
+    }
+
+    if (m_issuesPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_issuesPanel);
+    }
+    if (m_diagnosticsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_diagnosticsPanel);
+    }
+    if (m_issuesPanel && m_diagnosticsPanel) {
+      tabifyDockWidget(m_issuesPanel, m_diagnosticsPanel);
+    }
+
+    if (m_scriptEditorPanel) {
+      resizeDocks({m_scriptEditorPanel}, {600}, Qt::Horizontal);
+    }
+    if (m_issuesPanel) {
+      resizeDocks({m_issuesPanel}, {200}, Qt::Vertical);
+    }
+    break;
+  }
+  case LayoutPreset::Developer: {
+    if (m_sceneViewPanel)
+      m_sceneViewPanel->show();
+    if (m_scriptEditorPanel)
+      m_scriptEditorPanel->show();
+    if (m_inspectorPanel)
+      m_inspectorPanel->show();
+    if (m_debugOverlayPanel)
+      m_debugOverlayPanel->show();
+    if (m_voiceManagerPanel)
+      m_voiceManagerPanel->show();
+    if (m_localizationPanel)
+      m_localizationPanel->show();
+    if (m_consolePanel)
+      m_consolePanel->show();
+    if (m_issuesPanel)
+      m_issuesPanel->show();
+    if (m_diagnosticsPanel)
+      m_diagnosticsPanel->show();
+    if (m_hierarchyPanel)
+      m_hierarchyPanel->show();
+    if (m_assetBrowserPanel)
+      m_assetBrowserPanel->show();
+    if (m_timelinePanel)
+      m_timelinePanel->show();
+    if (m_curveEditorPanel)
+      m_curveEditorPanel->show();
+    if (m_buildSettingsPanel)
+      m_buildSettingsPanel->show();
+    if (m_buildSettingsPanel)
+      m_buildSettingsPanel->show();
+
+    if (m_hierarchyPanel) {
+      addDockWidget(Qt::LeftDockWidgetArea, m_hierarchyPanel);
+    }
+
+    if (m_sceneViewPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_sceneViewPanel);
+      m_sceneViewPanel->raise();
+    }
+    if (m_scriptEditorPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_scriptEditorPanel);
+    }
+    if (m_sceneViewPanel && m_scriptEditorPanel) {
+      tabifyDockWidget(m_sceneViewPanel, m_scriptEditorPanel);
+      m_sceneViewPanel->raise();
+    }
+
+    if (m_inspectorPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_inspectorPanel);
+    }
+    if (m_debugOverlayPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_debugOverlayPanel);
+    }
+    if (m_voiceManagerPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_voiceManagerPanel);
+    }
+    if (m_localizationPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_localizationPanel);
+    }
+    if (m_inspectorPanel && m_debugOverlayPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_debugOverlayPanel);
+      m_inspectorPanel->raise();
+    }
+    if (m_inspectorPanel && m_voiceManagerPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_voiceManagerPanel);
+    }
+    if (m_inspectorPanel && m_localizationPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_localizationPanel);
+    }
+
+    if (m_consolePanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_consolePanel);
+    }
+    if (m_issuesPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_issuesPanel);
+    }
+    if (m_diagnosticsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_diagnosticsPanel);
+    }
+    if (m_assetBrowserPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_assetBrowserPanel);
+    }
+    if (m_timelinePanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_timelinePanel);
+    }
+    if (m_curveEditorPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_curveEditorPanel);
+    }
+    if (m_buildSettingsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_buildSettingsPanel);
+    }
+    if (m_buildSettingsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_buildSettingsPanel);
+    }
+    if (m_consolePanel && m_issuesPanel) {
+      tabifyDockWidget(m_consolePanel, m_issuesPanel);
+    }
+    if (m_consolePanel && m_diagnosticsPanel) {
+      tabifyDockWidget(m_consolePanel, m_diagnosticsPanel);
+    }
+    if (m_consolePanel && m_assetBrowserPanel) {
+      tabifyDockWidget(m_consolePanel, m_assetBrowserPanel);
+    }
+    if (m_consolePanel && m_timelinePanel) {
+      tabifyDockWidget(m_consolePanel, m_timelinePanel);
+    }
+    if (m_consolePanel && m_curveEditorPanel) {
+      tabifyDockWidget(m_consolePanel, m_curveEditorPanel);
+    }
+    if (m_consolePanel && m_buildSettingsPanel) {
+      tabifyDockWidget(m_consolePanel, m_buildSettingsPanel);
+    }
+    if (m_consolePanel && m_buildSettingsPanel) {
+      tabifyDockWidget(m_consolePanel, m_buildSettingsPanel);
+    }
+    if (m_consolePanel) {
+      m_consolePanel->raise();
+    }
+
+    if (m_hierarchyPanel) {
+      resizeDocks({m_hierarchyPanel}, {220}, Qt::Horizontal);
+    }
+    if (m_inspectorPanel) {
+      resizeDocks({m_inspectorPanel}, {300}, Qt::Horizontal);
+    }
+    if (m_consolePanel) {
+      resizeDocks({m_consolePanel}, {200}, Qt::Vertical);
+    }
+    break;
+  }
+  case LayoutPreset::Compact: {
+    if (m_sceneViewPanel)
+      m_sceneViewPanel->show();
+    if (m_storyGraphPanel)
+      m_storyGraphPanel->show();
+    if (m_scriptEditorPanel)
+      m_scriptEditorPanel->show();
+    if (m_scenePalettePanel)
+      m_scenePalettePanel->show();
+    if (m_hierarchyPanel)
+      m_hierarchyPanel->show();
+    if (m_inspectorPanel)
+      m_inspectorPanel->show();
+    if (m_voiceManagerPanel)
+      m_voiceManagerPanel->show();
+    if (m_localizationPanel)
+      m_localizationPanel->show();
+    if (m_consolePanel)
+      m_consolePanel->show();
+    if (m_assetBrowserPanel)
+      m_assetBrowserPanel->show();
+    if (m_issuesPanel)
+      m_issuesPanel->show();
+    if (m_diagnosticsPanel)
+      m_diagnosticsPanel->show();
+    if (m_timelinePanel)
+      m_timelinePanel->show();
+    if (m_curveEditorPanel)
+      m_curveEditorPanel->show();
+
+    if (m_scenePalettePanel) {
+      addDockWidget(Qt::LeftDockWidgetArea, m_scenePalettePanel);
+    }
+    if (m_hierarchyPanel) {
+      addDockWidget(Qt::LeftDockWidgetArea, m_hierarchyPanel);
+    }
+    if (m_scenePalettePanel && m_hierarchyPanel) {
+      tabifyDockWidget(m_scenePalettePanel, m_hierarchyPanel);
+    }
+
+    if (m_sceneViewPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_sceneViewPanel);
+      m_sceneViewPanel->raise();
+    }
+    if (m_storyGraphPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_storyGraphPanel);
+    }
+    if (m_scriptEditorPanel) {
+      addDockWidget(Qt::TopDockWidgetArea, m_scriptEditorPanel);
+    }
+    if (m_sceneViewPanel && m_storyGraphPanel) {
+      tabifyDockWidget(m_sceneViewPanel, m_storyGraphPanel);
+    }
+    if (m_sceneViewPanel && m_scriptEditorPanel) {
+      tabifyDockWidget(m_sceneViewPanel, m_scriptEditorPanel);
+    }
+
+    if (m_inspectorPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_inspectorPanel);
+    }
+    if (m_voiceManagerPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_voiceManagerPanel);
+    }
+    if (m_localizationPanel) {
+      addDockWidget(Qt::RightDockWidgetArea, m_localizationPanel);
+    }
+    if (m_inspectorPanel && m_voiceManagerPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_voiceManagerPanel);
+    }
+    if (m_inspectorPanel && m_localizationPanel) {
+      tabifyDockWidget(m_inspectorPanel, m_localizationPanel);
+    }
+
+    if (m_consolePanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_consolePanel);
+    }
+    if (m_assetBrowserPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_assetBrowserPanel);
+    }
+    if (m_issuesPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_issuesPanel);
+    }
+    if (m_diagnosticsPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_diagnosticsPanel);
+    }
+    if (m_timelinePanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_timelinePanel);
+    }
+    if (m_curveEditorPanel) {
+      addDockWidget(Qt::BottomDockWidgetArea, m_curveEditorPanel);
+    }
+    if (m_consolePanel && m_assetBrowserPanel) {
+      tabifyDockWidget(m_consolePanel, m_assetBrowserPanel);
+    }
+    if (m_consolePanel && m_issuesPanel) {
+      tabifyDockWidget(m_consolePanel, m_issuesPanel);
+    }
+    if (m_consolePanel && m_diagnosticsPanel) {
+      tabifyDockWidget(m_consolePanel, m_diagnosticsPanel);
+    }
+    if (m_consolePanel && m_timelinePanel) {
+      tabifyDockWidget(m_consolePanel, m_timelinePanel);
+    }
+    if (m_consolePanel && m_curveEditorPanel) {
+      tabifyDockWidget(m_consolePanel, m_curveEditorPanel);
+    }
+    if (m_consolePanel) {
+      m_consolePanel->raise();
+    }
+
+    if (m_hierarchyPanel) {
+      resizeDocks({m_hierarchyPanel}, {220}, Qt::Horizontal);
+    }
+    if (m_inspectorPanel) {
+      resizeDocks({m_inspectorPanel}, {280}, Qt::Horizontal);
+    }
+    if (m_consolePanel) {
+      resizeDocks({m_consolePanel}, {190}, Qt::Vertical);
+    }
+    break;
+  }
+  }
+}
+
+void NMMainWindow::toggleFocusMode(bool enabled) {
+  if (enabled == m_focusModeEnabled) {
+    if (enabled) {
+      applyFocusModeLayout();
+    }
+    return;
+  }
+
+  m_focusModeEnabled = enabled;
+  if (enabled) {
+    m_focusGeometry = saveGeometry();
+    m_focusState = saveState();
+    applyFocusModeLayout();
+  } else {
+    if (!m_focusGeometry.isEmpty()) {
+      restoreGeometry(m_focusGeometry);
+    }
+    if (!m_focusState.isEmpty()) {
+      restoreState(m_focusState);
+    } else {
+      createDefaultLayout();
+    }
+  }
+}
+
+void NMMainWindow::applyFocusModeLayout() {
+  QList<QDockWidget *> docks = {
+      m_sceneViewPanel,   m_storyGraphPanel,   m_inspectorPanel,
+      m_consolePanel,     m_assetBrowserPanel, m_scenePalettePanel,
+      m_hierarchyPanel,   m_scriptEditorPanel, m_scriptDocPanel,
+      m_playToolbarPanel, m_debugOverlayPanel, m_issuesPanel,
+      m_voiceManagerPanel, m_localizationPanel, m_timelinePanel,
+      m_curveEditorPanel, m_buildSettingsPanel};
+
+  for (auto *dock : docks) {
+    if (!dock) {
+      continue;
+    }
+    dock->setFloating(false);
+    dock->hide();
+    removeDockWidget(dock);
+  }
+
+  setCentralWidget(nullptr);
+
+  if (m_playToolbarPanel) {
+    addDockWidget(Qt::TopDockWidgetArea, m_playToolbarPanel);
+    m_playToolbarPanel->show();
+  }
+
+  if (m_sceneViewPanel) {
+    addDockWidget(Qt::TopDockWidgetArea, m_sceneViewPanel);
+    m_sceneViewPanel->show();
+    m_sceneViewPanel->raise();
+  }
+
+  if (m_inspectorPanel) {
+    addDockWidget(Qt::RightDockWidgetArea, m_inspectorPanel);
+    m_inspectorPanel->show();
+  }
+
+  if (m_assetBrowserPanel) {
+    addDockWidget(Qt::BottomDockWidgetArea, m_assetBrowserPanel);
+    m_assetBrowserPanel->show();
+  }
+
+  if (m_focusIncludeHierarchy && m_hierarchyPanel) {
+    addDockWidget(Qt::LeftDockWidgetArea, m_hierarchyPanel);
+    m_hierarchyPanel->show();
+  }
+
+  resizeDocks({m_inspectorPanel}, {300}, Qt::Horizontal);
+  resizeDocks({m_assetBrowserPanel}, {200}, Qt::Vertical);
+}
+
+void NMMainWindow::applyDockLockState(bool locked) {
+  m_layoutLocked = locked;
+
+  QList<QDockWidget *> docks = {
+      m_sceneViewPanel,   m_storyGraphPanel,   m_inspectorPanel,
+      m_consolePanel,     m_assetBrowserPanel, m_scenePalettePanel,
+      m_hierarchyPanel,   m_scriptEditorPanel, m_scriptDocPanel,
+      m_playToolbarPanel, m_debugOverlayPanel, m_issuesPanel,
+      m_voiceManagerPanel, m_localizationPanel, m_timelinePanel,
+      m_curveEditorPanel, m_buildSettingsPanel};
+
+  for (auto *dock : docks) {
+    if (!dock) {
+      continue;
+    }
+    QDockWidget::DockWidgetFeatures features = QDockWidget::DockWidgetClosable;
+    if (!m_layoutLocked) {
+      features |= QDockWidget::DockWidgetMovable;
+      if (m_floatAllowed) {
+        features |= QDockWidget::DockWidgetFloatable;
+      }
+    }
+    dock->setFeatures(features);
+  }
+}
+
+void NMMainWindow::applyTabbedDockMode(bool enabled) {
+  m_tabbedDockOnly = enabled;
+  if (m_tabbedDockOnly) {
+    setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AnimatedDocks);
+  } else {
+    setDockOptions(QMainWindow::AllowTabbedDocks | QMainWindow::AllowNestedDocks |
+                   QMainWindow::GroupedDragging | QMainWindow::AnimatedDocks);
+  }
+
+  if (!enabled) {
+    return;
+  }
+
+  QList<QDockWidget *> docks = {
+      m_sceneViewPanel,   m_storyGraphPanel,   m_inspectorPanel,
+      m_consolePanel,     m_assetBrowserPanel, m_scenePalettePanel,
+      m_hierarchyPanel,   m_scriptEditorPanel, m_scriptDocPanel,
+      m_playToolbarPanel, m_debugOverlayPanel, m_issuesPanel,
+      m_voiceManagerPanel, m_localizationPanel, m_timelinePanel,
+      m_curveEditorPanel, m_buildSettingsPanel};
+
+  QHash<Qt::DockWidgetArea, QDockWidget *> anchors;
+  for (auto *dock : docks) {
+    if (!dock || !dock->isVisible()) {
+      continue;
+    }
+    Qt::DockWidgetArea area = dockWidgetArea(dock);
+    if (!anchors.contains(area)) {
+      anchors.insert(area, dock);
+    } else {
+      tabifyDockWidget(anchors.value(area), dock);
+    }
+  }
+}
+
+void NMMainWindow::applyFloatAllowed(bool allowed) {
+  m_floatAllowed = allowed;
+  applyDockLockState(m_layoutLocked);
+}
+
+void NMMainWindow::saveCustomLayout() {
+  QSettings settings("NovelMind", "Editor");
+  settings.setValue("layout/custom/geometry", saveGeometry());
+  settings.setValue("layout/custom/state", saveState());
+  setStatusMessage(tr("Layout saved"));
+}
+
+void NMMainWindow::loadCustomLayout() {
+  QSettings settings("NovelMind", "Editor");
+  const QByteArray geometry =
+      settings.value("layout/custom/geometry").toByteArray();
+  const QByteArray state =
+      settings.value("layout/custom/state").toByteArray();
+  if (geometry.isEmpty() || state.isEmpty()) {
+    setStatusMessage(tr("No saved layout found"), 2000);
+    return;
+  }
+  restoreGeometry(geometry);
+  restoreState(state);
+  setStatusMessage(tr("Layout loaded"), 2000);
+}
+
+void NMMainWindow::saveLayout() {
+  QSettings settings("NovelMind", "Editor");
+  settings.setValue("mainwindow/geometry", saveGeometry());
+  settings.setValue("mainwindow/state", saveState());
+}
+
+void NMMainWindow::restoreLayout() {
+  QSettings settings("NovelMind", "Editor");
+
+  // Restore geometry
+  QByteArray geometry = settings.value("mainwindow/geometry").toByteArray();
+  if (!geometry.isEmpty()) {
+    restoreGeometry(geometry);
+  }
+
+  // Restore dock state
+  QByteArray state = settings.value("mainwindow/state").toByteArray();
+  if (!state.isEmpty()) {
+    restoreState(state);
+  }
+
+  // Ensure all panels are at least created and available
+  // Even if they were hidden in saved state, they should be accessible via View menu
+  if (m_sceneViewPanel && !m_sceneViewPanel->isVisible()) {
+    m_actionToggleSceneView->setChecked(false);
+  }
+  if (m_storyGraphPanel && !m_storyGraphPanel->isVisible()) {
+    m_actionToggleStoryGraph->setChecked(false);
+  }
+  if (m_inspectorPanel && !m_inspectorPanel->isVisible()) {
+    m_actionToggleInspector->setChecked(false);
+  }
+  if (m_consolePanel && !m_consolePanel->isVisible()) {
+    m_actionToggleConsole->setChecked(false);
+  }
+  if (m_issuesPanel && !m_issuesPanel->isVisible()) {
+    m_actionToggleIssues->setChecked(false);
+  }
+  if (m_assetBrowserPanel && !m_assetBrowserPanel->isVisible()) {
+    m_actionToggleAssetBrowser->setChecked(false);
+  }
+  if (m_voiceManagerPanel && !m_voiceManagerPanel->isVisible()) {
+    m_actionToggleVoiceManager->setChecked(false);
+  }
+  if (m_localizationPanel && !m_localizationPanel->isVisible()) {
+    m_actionToggleLocalization->setChecked(false);
+  }
+  if (m_timelinePanel && !m_timelinePanel->isVisible()) {
+    m_actionToggleTimeline->setChecked(false);
+  }
+  if (m_curveEditorPanel && !m_curveEditorPanel->isVisible()) {
+    m_actionToggleCurveEditor->setChecked(false);
+  }
+  if (m_buildSettingsPanel && !m_buildSettingsPanel->isVisible()) {
+    m_actionToggleBuildSettings->setChecked(false);
+  }
+  if (m_scenePalettePanel && !m_scenePalettePanel->isVisible()) {
+    m_actionToggleScenePalette->setChecked(false);
+  }
+  if (m_hierarchyPanel && !m_hierarchyPanel->isVisible()) {
+    m_actionToggleHierarchy->setChecked(false);
+  }
+  if (m_scriptEditorPanel && !m_scriptEditorPanel->isVisible()) {
+    m_actionToggleScriptEditor->setChecked(false);
+  }
+  if (m_scriptDocPanel && !m_scriptDocPanel->isVisible()) {
+    m_actionToggleScriptDocs->setChecked(false);
+  }
+  if (m_debugOverlayPanel && !m_debugOverlayPanel->isVisible()) {
+    m_actionToggleDebugOverlay->setChecked(false);
+  }
+}
+
+void NMMainWindow::resetToDefaultLayout() {
+  // Remove saved layout
+  QSettings settings("NovelMind", "Editor");
+  settings.remove("mainwindow/geometry");
+  settings.remove("mainwindow/state");
+
+  // Recreate default layout
+  if (m_actionFocusMode && m_actionFocusMode->isChecked()) {
+    m_actionFocusMode->setChecked(false);
+  }
+  createDefaultLayout();
+}
+
+} // namespace NovelMind::editor::qt

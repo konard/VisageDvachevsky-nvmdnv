@@ -1,0 +1,301 @@
+// Sample Visual Novel - Main Script
+// Demonstrates core NM Script features
+
+// Character definitions
+character Hero(name="Alex", color="#4A90D9")
+character Sage(name="Elder Sage", color="#FFD700")
+character Merchant(name="Traveling Merchant", color="#8B4513")
+character Narrator(name="", color="#AAAAAA")
+
+// Opening scene
+scene intro {
+    // Start with fade transition
+    transition fade 1.0
+    show background "bg_forest_dawn"
+
+    wait 0.5
+
+    play music "ambient_forest" loop=true
+
+    say Narrator "In a world where magic flows through ancient forests..."
+    say Narrator "A young adventurer begins their journey."
+
+    wait 0.5
+
+    show Hero at center
+
+    say Hero "What a beautiful morning."
+    say Hero "Today, I set out to find the legendary Elder Sage."
+
+    // First choice
+    choice {
+        "Check my belongings" -> {
+            set flag checked_inventory = true
+            say Hero "Let me see what I have..."
+            say Narrator "Alex checked their pack carefully."
+            set preparation = 10
+            goto intro_continue
+        }
+        "Start walking north" -> {
+            goto intro_continue
+        }
+        "Enjoy the scenery" -> {
+            say Hero "The forest is so peaceful..."
+            wait 1.0
+            say Narrator "Time passed quickly as Alex admired nature."
+            goto intro_continue
+        }
+    }
+}
+
+scene intro_continue {
+    say Narrator "With determination in their heart, Alex began walking."
+
+    hide Hero
+    transition dissolve 0.5
+
+    goto forest_path
+}
+
+// Forest exploration
+scene forest_path {
+    show background "bg_forest_path"
+
+    say Narrator "The path wound deeper into the ancient woods."
+
+    show Hero at left
+
+    if flag checked_inventory {
+        say Hero "I'm glad I checked my supplies earlier."
+    }
+
+    // Random encounter
+    set encounter_roll = 50  // Would be random in real implementation
+
+    if encounter_roll > 70 {
+        goto merchant_encounter
+    } else {
+        goto continue_path
+    }
+}
+
+scene merchant_encounter {
+    show Merchant at right with "friendly"
+
+    play sound "footsteps"
+
+    say Narrator "A figure emerged from behind a large oak tree."
+
+    say Merchant "Ho there, traveler! Care to see my wares?"
+
+    choice {
+        "Yes, show me what you have" -> {
+            set flag met_merchant = true
+            goto merchant_shop
+        }
+        "No thank you, I must hurry" -> {
+            say Merchant "Safe travels then!"
+            hide Merchant
+            goto continue_path
+        }
+        "Who are you?" -> {
+            say Merchant "Just a humble merchant, traveling these roads."
+            say Merchant "I've seen many adventurers pass through here."
+            goto merchant_encounter
+        }
+    }
+}
+
+scene merchant_shop {
+    say Merchant "Take a look at these fine items!"
+
+    // Shop logic would go here
+    set gold = 100
+
+    say Narrator "The merchant displayed various items."
+
+    choice {
+        "Buy a healing potion (20 gold)" if gold >= 20 -> {
+            set gold = gold - 20
+            set flag has_potion = true
+            say Merchant "Excellent choice!"
+            goto merchant_shop_continue
+        }
+        "Buy a map (15 gold)" if gold >= 15 -> {
+            set gold = gold - 15
+            set flag has_map = true
+            say Merchant "This will help you navigate!"
+            goto merchant_shop_continue
+        }
+        "Leave the shop" -> {
+            say Merchant "Come back anytime!"
+            hide Merchant
+            goto continue_path
+        }
+    }
+}
+
+scene merchant_shop_continue {
+    say Merchant "Anything else?"
+
+    choice {
+        "Continue shopping" -> goto merchant_shop
+        "That's all, thank you" -> {
+            say Merchant "Safe travels!"
+            hide Merchant
+            goto continue_path
+        }
+    }
+}
+
+scene continue_path {
+    say Narrator "Alex continued deeper into the forest."
+
+    show background "bg_forest_deep"
+    transition slide_left 0.3
+
+    say Hero "It's getting darker in here..."
+
+    if flag has_map {
+        say Hero "Good thing I have this map."
+        set navigation_bonus = 20
+    }
+
+    // Ambient sound change
+    stop music fade=1.0
+    play music "ambient_mysterious" loop=true
+
+    wait 0.5
+
+    goto sage_clearing
+}
+
+// Meeting the Sage
+scene sage_clearing {
+    show background "bg_clearing"
+    transition fade 0.5
+
+    play sound "magic_ambiance"
+
+    say Narrator "A clearing opened before Alex, bathed in ethereal light."
+
+    move Hero to left duration=0.5
+
+    show Sage at right with "wise"
+
+    say Sage "I have been expecting you, young one."
+
+    say Hero "Elder Sage! I've traveled far to find you."
+
+    say Sage "I know why you have come."
+    say Sage "But first, tell me..."
+
+    choice {
+        "I seek knowledge" -> {
+            set path = "scholar"
+            say Sage "A thirst for wisdom... admirable."
+            goto sage_test
+        }
+        "I seek power" -> {
+            set path = "warrior"
+            say Sage "Power without wisdom is dangerous."
+            say Sage "But I sense you understand this."
+            goto sage_test
+        }
+        "I seek to help others" -> {
+            set path = "healer"
+            say Sage "The noblest of paths."
+            goto sage_test
+        }
+    }
+}
+
+scene sage_test {
+    say Sage "Before I can teach you, you must prove your worth."
+
+    // Calculate score
+    set score = 0
+
+    if flag checked_inventory {
+        set score = score + 10
+    }
+
+    if flag met_merchant {
+        set score = score + 5
+    }
+
+    if flag has_potion {
+        set score = score + 10
+    }
+
+    if flag has_map {
+        set score = score + 10
+    }
+
+    say Sage "I sense your journey has been..."
+
+    if score >= 25 {
+        say Sage "...thoughtful and prepared. Excellent."
+        goto good_ending
+    } else if score >= 10 {
+        say Sage "...adequate. There is potential."
+        goto neutral_ending
+    } else {
+        say Sage "...hasty. You have much to learn."
+        goto learning_ending
+    }
+}
+
+// Endings
+scene good_ending {
+    play music "triumphant_theme"
+
+    say Sage "You have shown wisdom beyond your years."
+    say Sage "I will teach you the ancient arts."
+
+    // Visual effect
+    flash color="#FFFFFF" duration=0.3
+
+    say Narrator "And so began Alex's training under the Elder Sage..."
+    say Narrator "The future held great promise."
+
+    transition fade 2.0
+
+    say Narrator "THE END"
+    say Narrator "Thank you for playing!"
+
+    // In a real game, would return to title screen
+}
+
+scene neutral_ending {
+    play music "gentle_theme"
+
+    say Sage "You show promise, but there is room to grow."
+    say Sage "Return to me when you have gained more experience."
+
+    say Hero "I understand. I won't disappoint you."
+
+    say Narrator "Alex left the clearing with new determination..."
+    say Narrator "The journey was only beginning."
+
+    transition fade 2.0
+
+    say Narrator "TO BE CONTINUED..."
+}
+
+scene learning_ending {
+    say Sage "Your haste betrays inexperience."
+    say Sage "But every master was once a student."
+
+    say Sage "Take this advice: slow down, observe, prepare."
+    say Sage "Then return to me."
+
+    say Hero "I... I understand, Elder Sage."
+
+    say Narrator "Though disappointed, Alex knew the Sage spoke truth."
+    say Narrator "There was much yet to learn."
+
+    transition fade 2.0
+
+    say Narrator "Try again? Perhaps a different approach..."
+}

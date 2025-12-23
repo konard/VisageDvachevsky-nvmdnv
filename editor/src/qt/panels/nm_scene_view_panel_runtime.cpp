@@ -1,0 +1,465 @@
+#include "NovelMind/editor/qt/panels/nm_scene_view_panel.hpp"
+#include "NovelMind/editor/editor_runtime_host.hpp"
+#include "NovelMind/editor/project_manager.hpp"
+#include "NovelMind/editor/qt/nm_play_mode_controller.hpp"
+#include "nm_scene_view_overlays.hpp"
+
+#include <QDebug>
+
+namespace NovelMind::editor::qt {
+
+void NMSceneViewPanel::onPlayModeCurrentNodeChanged(const QString &nodeId) {
+  if (!m_scene) {
+    return;
+  }
+
+  qDebug() << "[SceneView] Play mode node changed:" << nodeId;
+  if (nodeId.isEmpty()) {
+    if (m_playOverlay) {
+      m_playOverlay->clearDialogue();
+      m_playOverlay->clearChoices();
+    }
+    return;
+  }
+
+  if (!m_followPlayModeNodes || !m_playModeActive) {
+    return;
+  }
+
+  if (nodeId == m_currentSceneId || m_isLoadingScene) {
+    return;
+  }
+
+  if (!loadSceneDocument(nodeId)) {
+    qWarning() << "[SceneView] Failed to load scene for node:" << nodeId;
+  }
+}
+
+void NMSceneViewPanel::onPlayModeDialogueChanged(const QString &speaker,
+                                                 const QString &text) {
+  if (!m_playOverlay) {
+    return;
+  }
+  if (text.isEmpty()) {
+    m_playOverlay->clearDialogue();
+  } else {
+    m_playOverlay->setDialogue(speaker, text);
+  }
+}
+
+void NMSceneViewPanel::onPlayModeChoicesChanged(const QStringList &choices) {
+  if (!m_playOverlay) {
+    return;
+  }
+  if (choices.isEmpty()) {
+    m_playOverlay->clearChoices();
+  } else {
+    m_playOverlay->setChoices(choices);
+  }
+}
+
+void NMSceneViewPanel::setStoryPreview(const QString &speaker,
+                                       const QString &text,
+                                       const QStringList &choices) {
+  if (!m_playOverlay) {
+    return;
+  }
+  m_editorPreviewSpeaker = speaker;
+  m_editorPreviewText = text;
+  m_editorPreviewChoices = choices;
+  m_editorPreviewActive =
+      !text.trimmed().isEmpty() || !choices.isEmpty();
+
+  if (m_playModeActive) {
+    return;
+  }
+
+  applyEditorPreview();
+}
+
+void NMSceneViewPanel::clearStoryPreview() {
+  m_editorPreviewActive = false;
+  m_editorPreviewSpeaker.clear();
+  m_editorPreviewText.clear();
+  m_editorPreviewChoices.clear();
+
+  if (!m_playOverlay || m_playModeActive) {
+    return;
+  }
+
+  m_playOverlay->clearDialogue();
+  m_playOverlay->clearChoices();
+  updatePreviewOverlayVisibility();
+}
+
+void NMSceneViewPanel::hideEditorObjectsForRuntime() {
+  if (!m_scene) {
+    return;
+  }
+
+  captureEditorObjectsForRuntime();
+  for (auto *obj : m_scene->sceneObjects()) {
+    if (!obj || obj->id().startsWith("runtime_")) {
+      continue;
+    }
+    obj->setVisible(false);
+  }
+}
+
+void NMSceneViewPanel::captureEditorObjectsForRuntime() {
+  if (!m_scene) {
+    return;
+  }
+
+  if (!m_editorVisibility.isEmpty() || !m_editorOpacity.isEmpty()) {
+    return;
+  }
+
+  m_editorVisibility.clear();
+  m_editorOpacity.clear();
+  m_editorVisibilitySceneId = m_currentSceneId;
+  for (auto *obj : m_scene->sceneObjects()) {
+    if (!obj || obj->id().startsWith("runtime_")) {
+      continue;
+    }
+    m_editorVisibility.insert(obj->id(), obj->isVisible());
+    m_editorOpacity.insert(obj->id(), obj->opacity());
+  }
+}
+
+void NMSceneViewPanel::restoreEditorObjectsAfterRuntime() {
+  if (!m_scene) {
+    return;
+  }
+
+  if (!m_editorVisibilitySceneId.isEmpty() &&
+      m_currentSceneId != m_editorVisibilitySceneId) {
+    return;
+  }
+
+  for (auto it = m_editorVisibility.constBegin();
+       it != m_editorVisibility.constEnd(); ++it) {
+    if (auto *obj = m_scene->findSceneObject(it.key())) {
+      obj->setVisible(it.value());
+    }
+  }
+  for (auto it = m_editorOpacity.constBegin();
+       it != m_editorOpacity.constEnd(); ++it) {
+    if (auto *obj = m_scene->findSceneObject(it.key())) {
+      obj->setOpacity(it.value());
+    }
+  }
+  m_editorVisibility.clear();
+  m_editorOpacity.clear();
+  m_editorVisibilitySceneId.clear();
+}
+
+void NMSceneViewPanel::applyRuntimeSnapshot(
+    const ::NovelMind::editor::SceneSnapshot &snapshot) {
+  if (!m_scene) {
+    return;
+  }
+
+  if (m_followPlayModeNodes) {
+    if (m_runtimePreviewActive) {
+      clearRuntimePreview();
+    }
+    updateRuntimePreviewVisibility();
+    return;
+  }
+
+  const bool enteringRuntime = !m_runtimePreviewActive;
+
+  // Remember current selection to restore if possible
+  QString previousSelection;
+  if (auto *selected = m_scene->selectedObject()) {
+    previousSelection = selected->id();
+  }
+
+  if (enteringRuntime) {
+    m_editorSelectionBeforeRuntime.clear();
+    if (!previousSelection.isEmpty() &&
+        !previousSelection.startsWith("runtime_")) {
+      m_editorSelectionBeforeRuntime = previousSelection;
+    }
+  }
+
+  // Remove previous runtime-only objects
+  for (const auto &id : m_runtimeObjectIds) {
+    m_scene->removeSceneObject(id);
+  }
+  m_runtimeObjectIds.clear();
+
+  if (enteringRuntime) {
+    hideEditorObjectsForRuntime();
+    m_scene->clearSelection();
+  }
+
+  const QString assetsRoot =
+      QString::fromStdString(ProjectManager::instance().getFolderPath(
+          ProjectFolder::Assets));
+  m_assetsRoot = assetsRoot;
+
+  if (m_glViewport) {
+    m_glViewport->setSnapshot(snapshot, m_assetsRoot);
+    syncCameraToPreview();
+  }
+
+  if (!m_renderRuntimeSceneObjects) {
+    m_runtimePreviewActive = true;
+    emit sceneObjectsChanged();
+    return;
+  }
+
+  auto objectNameFromState = [](const scene::SceneObjectState &state) {
+    auto it = state.properties.find("name");
+    if (it != state.properties.end()) {
+      return QString::fromStdString(it->second);
+    }
+    return QString::fromStdString(state.id);
+  };
+
+  auto textureHintFromState = [](const scene::SceneObjectState &state) {
+    const char *keys[] = {"textureId", "texture", "image", "sprite",
+                          "background"};
+    for (auto *key : keys) {
+      auto it = state.properties.find(key);
+      if (it != state.properties.end()) {
+        return QString::fromStdString(it->second);
+      }
+    }
+    return QString::fromStdString(state.id);
+  };
+
+  // Recreate objects from snapshot
+  auto toQtType = [](scene::SceneObjectType type) {
+    switch (type) {
+    case scene::SceneObjectType::Background:
+      return NMSceneObjectType::Background;
+    case scene::SceneObjectType::Character:
+      return NMSceneObjectType::Character;
+    case scene::SceneObjectType::EffectOverlay:
+      return NMSceneObjectType::Effect;
+    default:
+      return NMSceneObjectType::UI;
+    }
+  };
+
+  int runtimeIndex = 0;
+  for (const auto &state : snapshot.objects) {
+    QString baseId = QString::fromStdString(state.id);
+    if (baseId.isEmpty()) {
+      baseId = QString::number(runtimeIndex++);
+    }
+    QString id = QString("runtime_%1").arg(baseId);
+    while (m_scene->findSceneObject(id) || m_runtimeObjectIds.contains(id)) {
+      id = QString("runtime_%1_%2").arg(baseId).arg(runtimeIndex++);
+    }
+
+    auto *obj = new NMSceneObject(id, toQtType(state.type));
+    obj->setName(objectNameFromState(state));
+    obj->setPos(QPointF(state.x, state.y));
+    obj->setZValue(state.zOrder);
+    obj->setRotation(state.rotation);
+    obj->setScaleXY(state.scaleX, state.scaleY);
+    obj->setOpacity(state.alpha);
+    obj->setVisible(state.visible);
+    obj->setPixmap(
+        loadPixmapForAsset(textureHintFromState(state), obj->objectType()));
+    m_scene->addSceneObject(obj);
+    m_runtimeObjectIds << id;
+  }
+
+  m_runtimePreviewActive = true;
+
+  const QString fallbackSelection =
+      m_runtimeObjectIds.isEmpty() ? QString() : m_runtimeObjectIds.front();
+
+  // Restore selection if it still exists
+  bool restored = false;
+  if (!enteringRuntime && !previousSelection.isEmpty() &&
+      m_scene->findSceneObject(previousSelection)) {
+    m_scene->selectObject(previousSelection);
+    restored = true;
+  } else if (!fallbackSelection.isEmpty() &&
+             m_scene->findSceneObject(fallbackSelection)) {
+    m_scene->selectObject(fallbackSelection);
+    restored = true;
+  }
+
+  if (!restored) {
+    m_scene->clearSelection();
+  }
+
+  emit sceneObjectsChanged();
+  syncRuntimeSelection();
+}
+
+void NMSceneViewPanel::onPlayModeChanged(int mode) {
+  auto playMode = static_cast<NMPlayModeController::PlayMode>(mode);
+  qDebug() << "[SceneView] Play mode changed to:" << playMode;
+
+  if (m_playOverlay) {
+    m_playOverlay->setInteractionEnabled(
+        playMode != NMPlayModeController::Stopped);
+    if (playMode != NMPlayModeController::Stopped) {
+      m_playOverlay->setFocus();
+    }
+  }
+
+  if (playMode != NMPlayModeController::Stopped) {
+    m_playModeActive = true;
+    if (m_followPlayModeNodes && m_sceneIdBeforePlay.isEmpty()) {
+      m_sceneIdBeforePlay = m_currentSceneId;
+      if (!m_currentSceneId.isEmpty() && !m_isLoadingScene) {
+        saveSceneDocument();
+      }
+    }
+    m_suppressSceneSave = m_followPlayModeNodes;
+    captureEditorObjectsForRuntime();
+    if (m_scene) {
+      m_gridVisibleBeforeRuntime = m_scene->isGridVisible();
+      m_scene->setGridVisible(false);
+    }
+    if (m_infoOverlay) {
+      m_infoOverlay->setPlayModeActive(true);
+      m_infoOverlay->show();
+    }
+    if (m_followPlayModeNodes && m_runtimePreviewActive) {
+      clearRuntimePreview();
+    }
+  }
+
+  if (playMode == NMPlayModeController::Stopped) {
+    m_playModeActive = false;
+    m_suppressSceneSave = false;
+    // Hide all runtime UI elements when stopped
+    qDebug() << "[SceneView] Hiding runtime UI elements (playback stopped)";
+    if (m_playOverlay && !m_editorPreviewActive) {
+      m_playOverlay->clearDialogue();
+      m_playOverlay->clearChoices();
+    }
+    if (m_scene) {
+      m_scene->setGridVisible(m_gridVisibleBeforeRuntime);
+    }
+    if (m_infoOverlay) {
+      m_infoOverlay->setPlayModeActive(false);
+      m_infoOverlay->show();
+    }
+    clearRuntimePreview();
+
+    if (!m_sceneIdBeforePlay.isEmpty() &&
+        m_sceneIdBeforePlay != m_currentSceneId) {
+      const bool prevSuppress = m_suppressSceneSave;
+      m_suppressSceneSave = true;
+      loadSceneDocument(m_sceneIdBeforePlay);
+      m_suppressSceneSave = prevSuppress;
+    }
+    m_sceneIdBeforePlay.clear();
+
+    applyEditorPreview();
+  }
+
+  updateRuntimePreviewVisibility();
+  updatePreviewOverlayVisibility();
+}
+
+void NMSceneViewPanel::syncRuntimeSelection() {
+  // If selection is a runtime object, keep inspector/hierarchy in sync
+  if (!m_scene) {
+    return;
+  }
+  if (auto *selected = m_scene->selectedObject()) {
+    emit objectSelected(selected->id());
+  }
+}
+
+void NMSceneViewPanel::clearRuntimePreview() {
+  if (!m_scene) {
+    return;
+  }
+
+  bool selectionWasRuntime = false;
+  if (auto *selected = m_scene->selectedObject()) {
+    selectionWasRuntime = m_runtimeObjectIds.contains(selected->id());
+  }
+
+  for (const auto &id : m_runtimeObjectIds) {
+    m_scene->removeSceneObject(id);
+  }
+  m_runtimeObjectIds.clear();
+  m_runtimePreviewActive = false;
+
+  restoreEditorObjectsAfterRuntime();
+
+  if (selectionWasRuntime) {
+    m_scene->clearSelection();
+    if (m_infoOverlay) {
+      m_infoOverlay->clearSelectedObjectInfo();
+    }
+  }
+
+  if (!m_editorSelectionBeforeRuntime.isEmpty()) {
+    if (m_scene->findSceneObject(m_editorSelectionBeforeRuntime)) {
+      m_scene->selectObject(m_editorSelectionBeforeRuntime);
+    }
+    m_editorSelectionBeforeRuntime.clear();
+  }
+
+  if (m_glViewport) {
+    m_glViewport->setSnapshot(::NovelMind::editor::SceneSnapshot{},
+                              m_assetsRoot);
+  }
+
+  emit sceneObjectsChanged();
+}
+
+void NMSceneViewPanel::updateRuntimePreviewVisibility() {
+  if (!m_glViewport) {
+    return;
+  }
+
+  const bool showGL =
+      m_playModeActive && !m_followPlayModeNodes && !m_renderRuntimeSceneObjects;
+  m_glViewport->setVisible(showGL);
+
+  if (m_fontWarning) {
+    const QString status = m_glViewport->fontAtlasStatus();
+    const bool showWarning = showGL && !status.isEmpty();
+    m_fontWarning->setText(status);
+    m_fontWarning->setVisible(showWarning);
+  }
+}
+
+void NMSceneViewPanel::applyEditorPreview() {
+  if (!m_playOverlay || m_playModeActive) {
+    return;
+  }
+
+  if (m_editorPreviewActive) {
+    m_playOverlay->setDialogueImmediate(m_editorPreviewSpeaker,
+                                        m_editorPreviewText);
+    if (m_editorPreviewChoices.isEmpty()) {
+      m_playOverlay->clearChoices();
+    } else {
+      m_playOverlay->setChoices(m_editorPreviewChoices);
+    }
+    m_playOverlay->setInteractionEnabled(false);
+  } else {
+    m_playOverlay->clearDialogue();
+    m_playOverlay->clearChoices();
+  }
+
+  updatePreviewOverlayVisibility();
+}
+
+void NMSceneViewPanel::updatePreviewOverlayVisibility() {
+  if (!m_playOverlay) {
+    return;
+  }
+  const bool visible = m_playModeActive || m_editorPreviewActive;
+  m_playOverlay->setVisible(visible);
+}
+
+
+} // namespace NovelMind::editor::qt

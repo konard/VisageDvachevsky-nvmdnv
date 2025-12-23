@@ -1,0 +1,228 @@
+#pragma once
+
+/**
+ * @file nm_asset_browser_panel.hpp
+ * @brief Asset Browser panel for managing project assets
+ *
+ * Provides:
+ * - Directory tree navigation
+ * - Asset grid/list view toggle
+ * - Asset preview (images, audio waveforms, duration/format)
+ * - Context menu: rename, delete, duplicate, reimport, show in explorer
+ * - AssetDatabase info: ID, type, size
+ * - Stable IDs during renaming
+ * - Import/export controls
+ * - Undo/redo for asset operations
+ */
+
+#include "NovelMind/editor/qt/nm_dock_panel.hpp"
+#include <QFileIconProvider>
+#include <QFileSystemModel>
+#include <QFrame>
+#include <QLabel>
+#include <QListView>
+#include <QLineEdit>
+#include <QSplitter>
+#include <QComboBox>
+#include <QSortFilterProxyModel>
+#include <QToolBar>
+#include <QTreeView>
+#include <QAction>
+#include <QHash>
+#include <QUndoStack>
+
+namespace NovelMind::editor::qt {
+
+/**
+ * @brief Asset metadata from database
+ */
+struct AssetMetadata {
+  QString id;           // Stable unique ID
+  QString type;         // Asset type (image, audio, font, script, etc.)
+  QString path;         // Relative path
+  qint64 size = 0;      // File size in bytes
+  QString format;       // File format
+  QDateTime modified;   // Last modified time
+  int width = 0;        // For images: width
+  int height = 0;       // For images: height
+  double duration = 0;  // For audio: duration in seconds
+  int sampleRate = 0;   // For audio: sample rate
+  int channels = 0;     // For audio: number of channels
+  QStringList usages;   // Where this asset is used
+};
+
+/**
+ * @brief View mode for asset list
+ */
+enum class AssetViewMode {
+  Grid,
+  List
+};
+
+/**
+ * @brief Asset Browser panel for asset management
+ */
+class NMAssetBrowserPanel : public NMDockPanel {
+  Q_OBJECT
+
+public:
+  explicit NMAssetBrowserPanel(QWidget *parent = nullptr);
+  ~NMAssetBrowserPanel() override;
+
+  void onInitialize() override;
+  void onUpdate(double deltaTime) override;
+
+  /**
+   * @brief Set the root path for the asset browser
+   */
+  void setRootPath(const QString &path);
+
+  /**
+   * @brief Get the currently selected asset path
+   */
+  [[nodiscard]] QString selectedAssetPath() const;
+
+  /**
+   * @brief Refresh the asset view
+   */
+  void refresh();
+
+protected:
+  bool eventFilter(QObject *watched, QEvent *event) override;
+
+  /**
+   * @brief Set the view mode (grid/list)
+   */
+  void setViewMode(AssetViewMode mode);
+  [[nodiscard]] AssetViewMode viewMode() const { return m_viewMode; }
+
+  /**
+   * @brief Get asset metadata
+   */
+  [[nodiscard]] AssetMetadata getAssetMetadata(const QString &path) const;
+
+  /**
+   * @brief Rename an asset (maintains stable ID)
+   */
+  bool renameAsset(const QString &oldPath, const QString &newName);
+
+  /**
+   * @brief Delete an asset
+   */
+  bool deleteAsset(const QString &path);
+
+  /**
+   * @brief Duplicate an asset
+   */
+  QString duplicateAsset(const QString &path);
+
+  /**
+   * @brief Reimport an asset
+   */
+  bool reimportAsset(const QString &path);
+
+  /**
+   * @brief Show asset in system file explorer
+   */
+  void showInExplorer(const QString &path);
+
+  /**
+   * @brief Navigate selection history
+   */
+  void navigateBack();
+  void navigateForward();
+
+signals:
+  void assetSelected(const QString &path);
+  void assetDoubleClicked(const QString &path);
+  void assetContextMenu(const QString &path, const QPoint &globalPos);
+  void assetRenamed(const QString &oldPath, const QString &newPath);
+  void assetDeleted(const QString &path);
+  void assetDuplicated(const QString &originalPath, const QString &newPath);
+
+private slots:
+  void onTreeClicked(const QModelIndex &index);
+  void onListDoubleClicked(const QModelIndex &index);
+  void onListContextMenu(const QPoint &pos);
+  void onImportAssets();
+  void onListSelectionChanged(const QModelIndex &current,
+                              const QModelIndex &previous);
+  void onFilterTextChanged(const QString &text);
+  void onTypeFilterChanged(int index);
+  void onViewModeChanged(int index);
+  void onRenameAction();
+  void onDeleteAction();
+  void onDuplicateAction();
+  void onReimportAction();
+  void onShowInExplorerAction();
+  void onCopyPathAction();
+  void onCopyIdAction();
+
+private:
+  void setupToolBar();
+  void setupContent();
+  void applyFilters();
+  void setPreviewVisible(bool visible);
+  void updateThumbnailSize(int size);
+  void updatePreview(const QString &path);
+  void clearPreview();
+  void importFiles(const QStringList &files, bool interactive);
+  QString importDestinationForExtension(const QString &extension) const;
+  QString generateUniquePath(const QString &directory,
+                             const QString &fileName) const;
+
+  QSplitter *m_splitter = nullptr;
+  QTreeView *m_treeView = nullptr;
+  QListView *m_listView = nullptr;
+  QWidget *m_listPane = nullptr;
+  QFrame *m_previewFrame = nullptr;
+  QLabel *m_previewImage = nullptr;
+  QLabel *m_previewName = nullptr;
+  QLabel *m_previewMeta = nullptr;
+  QFileSystemModel *m_treeModel = nullptr;
+  QFileSystemModel *m_listModel = nullptr;
+  QSortFilterProxyModel *m_filterProxy = nullptr;
+  QFileIconProvider *m_iconProvider = nullptr;
+  QWidget *m_contentWidget = nullptr;
+  QToolBar *m_toolBar = nullptr;
+  QLineEdit *m_filterEdit = nullptr;
+  QComboBox *m_typeFilter = nullptr;
+  QAction *m_togglePreviewAction = nullptr;
+  QComboBox *m_thumbSizeCombo = nullptr;
+
+  QString m_rootPath;
+  QString m_currentPath;
+  QString m_previewPath;
+  int m_thumbSize = 80;
+  bool m_previewVisible = true;
+  AssetViewMode m_viewMode = AssetViewMode::Grid;
+
+  // Asset metadata cache
+  mutable QHash<QString, AssetMetadata> m_metadataCache;
+
+  // Selection history for back/forward navigation
+  QStringList m_selectionHistory;
+  int m_historyIndex = -1;
+
+  // Context menu actions
+  QAction *m_renameAction = nullptr;
+  QAction *m_deleteAction = nullptr;
+  QAction *m_duplicateAction = nullptr;
+  QAction *m_reimportAction = nullptr;
+  QAction *m_showInExplorerAction = nullptr;
+  QAction *m_copyPathAction = nullptr;
+  QAction *m_copyIdAction = nullptr;
+
+  // View mode toggle
+  QComboBox *m_viewModeCombo = nullptr;
+  QAction *m_backAction = nullptr;
+  QAction *m_forwardAction = nullptr;
+
+  // Undo stack for asset operations
+  QUndoStack *m_undoStack = nullptr;
+
+  // Audio waveform display
+  QLabel *m_waveformLabel = nullptr;
+};
+
+} // namespace NovelMind::editor::qt

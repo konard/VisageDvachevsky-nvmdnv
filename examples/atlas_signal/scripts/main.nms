@@ -1,0 +1,405 @@
+// Atlas Signal - Large Test Visual Novel
+// Demonstrates branching, variables, flags, transitions, audio, and effects.
+
+character Narrator(name="", color="#AAAAAA")
+character Mira(name="Mira", color="#7CC7FF")
+character Sol(name="Sol", color="#FFD36A")
+character Archivist(name="Archivist", color="#B7B7B7")
+character Warden(name="Warden", color="#FF8A6B")
+character Echo(name="Echo", color="#8BFFCF")
+
+scene prologue {
+    transition fade 1.0
+    show background "Assets/Images/bg_rooftop_night.png"
+
+    play music "Assets/Audio/Music/bgm_rooftop.wav" loop=true
+
+    set trust = 0
+    set curiosity = 0
+    set resolve = 0
+    set visits = 0
+    set credits = 2
+
+    say Narrator "The city slept under a lattice of cables and constellations."
+    say Narrator "On a rooftop, a handmade antenna hunted a signal no map admitted."
+
+    show Mira at center with "focused"
+
+    say Mira "If the Atlas Signal is real, it shows tonight."
+    say Mira "{w=0.3}No more waiting."
+
+    choice {
+        "Tune the antenna now" -> {
+            set flag tuned_early = true
+            set resolve = resolve + 1
+            say Mira "We lock the frequency before it drifts."
+        }
+        "Wait for the anomaly" -> {
+            set flag waited_anomaly = true
+            set curiosity = curiosity + 1
+            say Mira "Patience. The sky gives the first hint."
+        }
+        "Record the sky" -> {
+            set flag saw_comet = true
+            set curiosity = curiosity + 1
+            say Narrator "A thin comet stitched a scar across the clouds."
+        }
+    }
+
+    goto lab_arrival
+}
+
+scene lab_arrival {
+    show background "Assets/Images/bg_lab_interior.png"
+    transition dissolve 0.5
+
+    play sound "Assets/Audio/Sounds/sfx_door_slide.wav"
+
+    show Sol at left with "relieved"
+    show Echo at right with "holo"
+
+    say Sol "You are late. The grid had a surge."
+    say Echo "Signal variance detected. Probability of origin: non-terrestrial."
+
+    choice {
+        "Tell Sol everything" -> {
+            set flag shared_signal = true
+            set trust = trust + 1
+            say Mira "I tuned early. There is a second harmonic."
+            say Sol "Then we chase it together."
+        }
+        "Keep the details vague" -> {
+            set flag hid_details = true
+            say Mira "Noise spikes, maybe solar. We should log it."
+            say Sol "Fine. But log it right."
+        }
+        "Ask Echo to analyze silently" -> {
+            set flag asked_echo = true
+            say Mira "Echo, run your sweep."
+            say Echo "Acknowledged."
+        }
+    }
+
+    goto lab_brief
+}
+
+scene lab_brief {
+    say Narrator "Screens flickered. The antenna feed braided with forgotten code."
+
+    if flag tuned_early {
+        say Sol "Good instinct. The signal held."
+        set trust = trust + 1
+    }
+
+    if flag saw_comet {
+        say Mira "It was not just a meteor. It was a marker."
+    }
+
+    move Echo to center duration=0.4
+    flash color="#A0E9FF" duration=0.2
+
+    say Echo "Pattern recognized. Coordinates incomplete."
+    say Mira "We need more anchors."
+
+    goto hub
+}
+
+scene hub {
+    show background "Assets/Images/bg_city_hub_dawn.png"
+    transition slide_left 0.4
+
+    if visits == 0 {
+        say Narrator "Dawn crept in. The city offered three routes."
+    } else {
+        say Narrator "The clock kept moving. The signal kept calling."
+    }
+
+    choice {
+        "Visit the Archive" -> goto path_archive
+        "Visit the Market" -> goto path_market
+        "Visit the Substation" -> goto path_substation
+        "Proceed to decode the signal" if visits >= 2 -> goto decode_prep
+    }
+}
+
+scene path_archive {
+    set visits = visits + 1
+
+    show background "Assets/Images/bg_archive_interior.png"
+    transition fade 0.4
+
+    play music "Assets/Audio/Music/bgm_archive.wav" loop=true
+
+    show Archivist at right with "calm"
+    show Mira at left
+
+    say Archivist "You want the old sky maps. That costs time or story."
+    say Mira "We can trade both."
+
+    choice {
+        "Enter the vault" -> goto archive_vault
+        "Interview the Archivist" -> goto archive_interview
+        "Leave quietly" -> {
+            stop music fade=0.5
+            goto hub
+        }
+    }
+}
+
+scene archive_vault {
+    show background "Assets/Images/bg_archive_vault.png"
+    transition dissolve 0.3
+
+    say Narrator "Stacks of analog reels hummed in darkness."
+    say Mira "Here. The map of blackout corridors."
+
+    set flag found_map = true
+    set curiosity = curiosity + 1
+
+    flash color="#FFF4C2" duration=0.2
+
+    say Archivist "Keep the reels safe. They remember storms."
+
+    stop music fade=0.5
+    goto hub
+}
+
+scene archive_interview {
+    say Archivist "Signals like yours appear every 37 years."
+    say Archivist "The last team never returned."
+
+    set flag rumor_heard = true
+    set curiosity = curiosity + 1
+
+    if flag shared_signal {
+        say Archivist "You trusted your partner. That might save you."
+        set trust = trust + 1
+    }
+
+    stop music fade=0.5
+    goto hub
+}
+
+scene path_market {
+    set visits = visits + 1
+
+    show background "Assets/Images/bg_market_day.png"
+    transition slide_right 0.4
+
+    play music "Assets/Audio/Music/bgm_market.wav" loop=true
+
+    show Warden at right with "stern"
+    show Mira at left
+
+    say Warden "No power cells, no passage. The grid is rationed."
+
+    choice {
+        "Buy a field battery (1 credit)" if credits >= 1 -> {
+            set credits = credits - 1
+            set flag got_battery = true
+            say Warden "Keep it dry. And keep moving."
+            goto market_after
+        }
+        "Help repair a drone" -> goto market_help
+        "Ask about the signal" -> goto market_gossip
+        "Leave the market" -> goto market_after
+    }
+}
+
+scene market_help {
+    play sound "Assets/Audio/Sounds/sfx_tool_clink.wav"
+
+    say Mira "Hold that panel. I can reroute the coil."
+    say Warden "You have steady hands."
+
+    set flag helped_warden = true
+    set resolve = resolve + 1
+
+    if !flag got_battery {
+        say Warden "Take this spare cell for your trouble."
+        set flag got_battery = true
+    }
+
+    goto market_after
+}
+
+scene market_gossip {
+    say Warden "People say the signal comes from under the harbor."
+    say Warden "People also say the harbor eats radios."
+
+    set flag rumor_heard = true
+    set curiosity = curiosity + 1
+
+    goto market_after
+}
+
+scene market_after {
+    stop music fade=0.5
+    goto hub
+}
+
+scene path_substation {
+    set visits = visits + 1
+
+    show background "Assets/Images/bg_substation_night.png"
+    transition fade 0.4
+
+    play music "Assets/Audio/Music/bgm_substation.wav" loop=true
+
+    say Narrator "The substation pulsed like a sleeping beast."
+
+    choice {
+        "Enter the core" -> goto substation_core
+        "Climb the relay tower" -> goto substation_tower
+        "Retreat" -> {
+            stop music fade=0.5
+            goto hub
+        }
+    }
+}
+
+scene substation_core {
+    show background "Assets/Images/bg_substation_core.png"
+    transition dissolve 0.3
+
+    play sound "Assets/Audio/Sounds/sfx_hum.wav"
+
+    say Narrator "{shake}The floor vibrates with every pulse.{/shake}"
+
+    choice {
+        "Reroute power" -> {
+            play sound "Assets/Audio/Sounds/sfx_switch.wav"
+            set flag rerouted_power = true
+            set resolve = resolve + 1
+            flash color="#88CCFF" duration=0.2
+            say Mira "Flow stabilized. The antenna will hold."
+        }
+        "Listen to the whisper" -> {
+            set flag heard_echo = true
+            set curiosity = curiosity + 1
+            say Echo "{w=0.4}Signal is speaking in packets."
+            say Echo "It wants a reply."
+        }
+    }
+
+    stop music fade=0.5
+    goto hub
+}
+
+scene substation_tower {
+    show background "Assets/Images/bg_relay_tower.png"
+    transition slide_up 0.4
+
+    say Narrator "Above the rails, the city glowed like circuitry."
+
+    if flag heard_echo {
+        say Mira "The echo is louder up here."
+    } else {
+        say Mira "The wind carries a pattern."
+    }
+
+    set flag heard_echo = true
+    set curiosity = curiosity + 1
+
+    stop music fade=0.5
+    goto hub
+}
+
+scene decode_prep {
+    show background "Assets/Images/bg_lab_interior.png"
+    transition fade 0.6
+
+    play music "Assets/Audio/Music/bgm_decode.wav" loop=true
+
+    say Sol "We have enough fragments. Let's try to open the Atlas."
+
+    set decode_score = 0
+
+    if flag found_map {
+        set decode_score = decode_score + 1
+    }
+
+    if flag got_battery {
+        set decode_score = decode_score + 1
+    }
+
+    if flag rerouted_power {
+        set decode_score = decode_score + 1
+    }
+
+    if flag heard_echo {
+        set decode_score = decode_score + 1
+    }
+
+    if flag rumor_heard {
+        set decode_score = decode_score + 1
+    }
+
+    if trust >= 2 {
+        set decode_score = decode_score + 1
+    }
+
+    say Echo "Alignment complete. Opening channel."
+
+    if decode_score >= 5 {
+        goto true_end
+    } else if decode_score >= 3 {
+        goto good_end
+    } else {
+        goto bad_end
+    }
+}
+
+scene true_end {
+    stop music fade=1.0
+    play music "Assets/Audio/Music/bgm_finale.wav" loop=true
+
+    show background "Assets/Images/bg_skybreak.png"
+    transition fade 1.0
+
+    show Mira at center with "awe"
+
+    flash color="#FFFFFF" duration=0.3
+
+    say Narrator "The sky unfolded like a map of impossible roads."
+    say Mira "We are not alone. We are invited."
+    say Sol "Then we answer. Together."
+
+    transition fade 2.0
+
+    say Narrator "TRUE END"
+    say Narrator "Thank you for testing Atlas Signal."
+}
+
+scene good_end {
+    stop music fade=1.0
+    play music "Assets/Audio/Music/bgm_soft_resolution.wav" loop=true
+
+    show background "Assets/Images/bg_lab_interior.png"
+    transition dissolve 0.5
+
+    say Narrator "The channel opened, but only for a moment."
+    say Mira "We have a direction. Next time, we go deeper."
+
+    transition fade 2.0
+
+    say Narrator "GOOD END"
+}
+
+scene bad_end {
+    stop music fade=1.0
+    play music "Assets/Audio/Music/bgm_shutdown.wav" loop=true
+
+    show background "Assets/Images/bg_blackout.png"
+    transition fade 0.7
+
+    play sound "Assets/Audio/Sounds/sfx_power_down.wav"
+
+    say Narrator "The signal dissolved into noise. The city dimmed."
+    say Mira "We were too late."
+
+    transition fade 2.0
+
+    say Narrator "BAD END"
+}
+

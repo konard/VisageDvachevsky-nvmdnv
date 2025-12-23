@@ -1,0 +1,107 @@
+# Build directories
+build/
+out/
+cmake-build-*/
+bin/
+lib/
+
+# Object files
+*.o
+*.obj
+*.lo
+*.slo
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Ninja
+.ninja_deps
+.ninja_log
+build.ninja
+
+# Clang
+.cache/
+compile_commands.json
+
+# Visual Studio
+*.vcxproj
+*.vcxproj.filters
+*.sln
+*.suo
+*.user
+*.ncb
+*.opensdf
+*.sdf
+ipch/
+x64/
+x86/
+Debug/
+Release/
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Package files
+*.nmres
+*.nmpack
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# Test results
+Testing/
+test-results/
+/build-wsl
+/build-win
+/build-ninja-msvc
+/build-ninja

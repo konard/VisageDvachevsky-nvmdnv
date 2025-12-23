@@ -1,0 +1,417 @@
+#include "NovelMind/editor/qt/panels/nm_hierarchy_panel.hpp"
+#include "NovelMind/editor/qt/nm_style_manager.hpp"
+#include "NovelMind/editor/qt/panels/nm_scene_view_panel.hpp"
+
+#include <QAction>
+#include <QHeaderView>
+#include <QSignalBlocker>
+#include <QToolBar>
+#include <QVBoxLayout>
+#include <algorithm>
+
+namespace NovelMind::editor::qt {
+
+// ============================================================================
+// NMHierarchyTree
+// ============================================================================
+
+NMHierarchyTree::NMHierarchyTree(QWidget *parent) : QTreeWidget(parent) {
+  setColumnCount(3);
+  setHeaderLabels({tr("Name"), tr("V"), tr("L")});
+  setHeaderHidden(false);
+  setSelectionMode(QAbstractItemView::ExtendedSelection);
+  setDragEnabled(false); // Phase 2: Enable for drag-drop
+  setAcceptDrops(false);
+  setDropIndicatorShown(true);
+  setAnimated(true);
+  setIndentation(16);
+
+  connect(this, &QTreeWidget::itemDoubleClicked, this,
+          &NMHierarchyTree::onItemDoubleClicked);
+  connect(this, &QTreeWidget::itemChanged, this,
+          &NMHierarchyTree::onItemChanged);
+
+  if (header()) {
+    header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+  }
+}
+
+void NMHierarchyTree::setScene(NMSceneGraphicsScene *scene) {
+  m_scene = scene;
+  refresh();
+}
+
+void NMHierarchyTree::refresh() {
+  QString previouslySelected;
+  if (!selectedItems().isEmpty()) {
+    previouslySelected = selectedItems()
+                             .first()
+                             ->data(0, Qt::UserRole)
+                             .toString();
+  }
+
+  QSignalBlocker blocker(this);
+  clear();
+
+  if (!m_scene) {
+    return;
+  }
+
+  auto *rootItem = new QTreeWidgetItem(this);
+  rootItem->setText(0, "Scene Objects");
+  rootItem->setExpanded(true);
+
+  QTreeWidgetItem *bgLayer = nullptr;
+  QTreeWidgetItem *charLayer = nullptr;
+  QTreeWidgetItem *uiLayer = nullptr;
+  QTreeWidgetItem *effectLayer = nullptr;
+
+  const auto objects = m_scene->sceneObjects();
+  QList<NMSceneObject *> sorted = objects;
+  std::sort(sorted.begin(), sorted.end(),
+            [](const NMSceneObject *a, const NMSceneObject *b) {
+              return a->zValue() < b->zValue();
+            });
+
+  for (NMSceneObject *object : sorted) {
+    if (!object) {
+      continue;
+    }
+
+    QTreeWidgetItem *parentItem = rootItem;
+    switch (object->objectType()) {
+    case NMSceneObjectType::Background:
+      if (!bgLayer) {
+        bgLayer = new QTreeWidgetItem(rootItem);
+        bgLayer->setText(0, "Backgrounds");
+        bgLayer->setExpanded(true);
+      }
+      parentItem = bgLayer;
+      break;
+    case NMSceneObjectType::Character:
+      if (!charLayer) {
+        charLayer = new QTreeWidgetItem(rootItem);
+        charLayer->setText(0, "Characters");
+        charLayer->setExpanded(true);
+      }
+      parentItem = charLayer;
+      break;
+    case NMSceneObjectType::UI:
+      if (!uiLayer) {
+        uiLayer = new QTreeWidgetItem(rootItem);
+        uiLayer->setText(0, "UI");
+        uiLayer->setExpanded(true);
+      }
+      parentItem = uiLayer;
+      break;
+    case NMSceneObjectType::Effect:
+      if (!effectLayer) {
+        effectLayer = new QTreeWidgetItem(rootItem);
+        effectLayer->setText(0, "Effects");
+        effectLayer->setExpanded(true);
+      }
+      parentItem = effectLayer;
+      break;
+    }
+
+    auto *item = new QTreeWidgetItem(parentItem);
+    item->setText(0, object->name().isEmpty() ? object->id() : object->name());
+    item->setData(0, Qt::UserRole, object->id());
+    item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+    item->setCheckState(1, object->isVisible() ? Qt::Checked : Qt::Unchecked);
+    item->setCheckState(2, object->isLocked() ? Qt::Checked : Qt::Unchecked);
+
+    const bool isRuntime = object->id().startsWith("runtime_");
+    if (isRuntime) {
+      QFont font = item->font(0);
+      font.setItalic(true);
+      item->setFont(0, font);
+      item->setForeground(0, NMStyleManager::instance().palette().accentPrimary);
+      item->setToolTip(0, tr("Runtime preview object (read-only)"));
+      item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
+    }
+  }
+
+  if (!previouslySelected.isEmpty()) {
+    QTreeWidgetItemIterator it(this);
+    while (*it) {
+      const QString id = (*it)->data(0, Qt::UserRole).toString();
+      if (id == previouslySelected) {
+        setCurrentItem(*it);
+        (*it)->setSelected(true);
+        scrollToItem(*it);
+        break;
+      }
+      ++it;
+    }
+  }
+}
+
+void NMHierarchyTree::selectionChanged(const QItemSelection &selected,
+                                       const QItemSelection &deselected) {
+  QTreeWidget::selectionChanged(selected, deselected);
+
+  QList<QTreeWidgetItem *> selectedItems = this->selectedItems();
+  if (!selectedItems.isEmpty()) {
+    QString objectId = selectedItems.first()->data(0, Qt::UserRole).toString();
+    if (!objectId.isEmpty()) {
+      emit itemSelected(objectId);
+    }
+  }
+}
+
+void NMHierarchyTree::onItemDoubleClicked(QTreeWidgetItem *item,
+                                          int /*column*/) {
+  if (item) {
+    QString objectId = item->data(0, Qt::UserRole).toString();
+    if (!objectId.isEmpty()) {
+      emit itemDoubleClicked(objectId);
+    }
+  }
+}
+
+void NMHierarchyTree::onItemChanged(QTreeWidgetItem *item, int column) {
+  if (!m_scene || !item) {
+    return;
+  }
+
+  const QString objectId = item->data(0, Qt::UserRole).toString();
+  if (objectId.isEmpty()) {
+    return;
+  }
+
+  if (column == 1) {
+    const bool visible = (item->checkState(1) == Qt::Checked);
+    m_scene->setObjectVisible(objectId, visible);
+    return;
+  }
+
+  if (column == 2) {
+    const bool locked = (item->checkState(2) == Qt::Checked);
+    m_scene->setObjectLocked(objectId, locked);
+    return;
+  }
+}
+
+// ============================================================================
+// NMHierarchyPanel
+// ============================================================================
+
+NMHierarchyPanel::NMHierarchyPanel(QWidget *parent)
+    : NMDockPanel(tr("Hierarchy"), parent) {
+  setPanelId("Hierarchy");
+  setupContent();
+  setupToolBar();
+}
+
+NMHierarchyPanel::~NMHierarchyPanel() = default;
+
+void NMHierarchyPanel::onInitialize() { refresh(); }
+
+void NMHierarchyPanel::onUpdate(double /*deltaTime*/) {
+  // No continuous update needed
+}
+
+void NMHierarchyPanel::refresh() {
+  if (m_tree) {
+    m_tree->refresh();
+  }
+}
+
+void NMHierarchyPanel::setScene(NMSceneGraphicsScene *scene) {
+  if (m_tree) {
+    m_tree->setScene(scene);
+  }
+}
+
+void NMHierarchyPanel::setSceneViewPanel(NMSceneViewPanel *panel) {
+  m_sceneViewPanel = panel;
+}
+
+void NMHierarchyPanel::selectObject(const QString &objectId) {
+  if (!m_tree)
+    return;
+
+  QSignalBlocker blocker(m_tree);
+
+  if (objectId.isEmpty()) {
+    m_tree->clearSelection();
+    return;
+  }
+
+  const auto selected = m_tree->selectedItems();
+  if (!selected.isEmpty() &&
+      selected.first()->data(0, Qt::UserRole).toString() == objectId) {
+    return;
+  }
+
+  // Find and select the item with the given object ID
+  QTreeWidgetItemIterator it(m_tree);
+  while (*it) {
+    if ((*it)->data(0, Qt::UserRole).toString() == objectId) {
+      m_tree->clearSelection();
+      (*it)->setSelected(true);
+      m_tree->scrollToItem(*it);
+      break;
+    }
+    ++it;
+  }
+}
+
+void NMHierarchyPanel::setupToolBar() {
+  m_toolBar = new QToolBar(this);
+  m_toolBar->setObjectName("HierarchyToolBar");
+  m_toolBar->setIconSize(QSize(16, 16));
+
+  QAction *actionRefresh = m_toolBar->addAction(tr("Refresh"));
+  actionRefresh->setToolTip(tr("Refresh Hierarchy"));
+  connect(actionRefresh, &QAction::triggered, this,
+          &NMHierarchyPanel::onRefresh);
+
+  m_toolBar->addSeparator();
+
+  QAction *actionExpandAll = m_toolBar->addAction(tr("Expand All"));
+  actionExpandAll->setToolTip(tr("Expand All Items"));
+  connect(actionExpandAll, &QAction::triggered, this,
+          &NMHierarchyPanel::onExpandAll);
+
+  QAction *actionCollapseAll = m_toolBar->addAction(tr("Collapse All"));
+  actionCollapseAll->setToolTip(tr("Collapse All Items"));
+  connect(actionCollapseAll, &QAction::triggered, this,
+          &NMHierarchyPanel::onCollapseAll);
+
+  m_toolBar->addSeparator();
+
+  QAction *actionBringForward = m_toolBar->addAction(tr("Up"));
+  actionBringForward->setToolTip(tr("Move selected object forward"));
+  connect(actionBringForward, &QAction::triggered, this,
+          &NMHierarchyPanel::onBringForward);
+
+  QAction *actionSendBackward = m_toolBar->addAction(tr("Down"));
+  actionSendBackward->setToolTip(tr("Move selected object backward"));
+  connect(actionSendBackward, &QAction::triggered, this,
+          &NMHierarchyPanel::onSendBackward);
+
+  QAction *actionBringToFront = m_toolBar->addAction(tr("Front"));
+  actionBringToFront->setToolTip(tr("Bring selected object to front"));
+  connect(actionBringToFront, &QAction::triggered, this,
+          &NMHierarchyPanel::onBringToFront);
+
+  QAction *actionSendToBack = m_toolBar->addAction(tr("Back"));
+  actionSendToBack->setToolTip(tr("Send selected object to back"));
+  connect(actionSendToBack, &QAction::triggered, this,
+          &NMHierarchyPanel::onSendToBack);
+
+  if (auto *layout = qobject_cast<QVBoxLayout *>(m_contentWidget->layout())) {
+    layout->insertWidget(0, m_toolBar);
+  }
+}
+
+void NMHierarchyPanel::setupContent() {
+  m_contentWidget = new QWidget(this);
+  auto *layout = new QVBoxLayout(m_contentWidget);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+
+  m_tree = new NMHierarchyTree(m_contentWidget);
+
+  connect(m_tree, &NMHierarchyTree::itemSelected, this,
+          &NMHierarchyPanel::objectSelected);
+  connect(m_tree, &NMHierarchyTree::itemDoubleClicked, this,
+          &NMHierarchyPanel::objectDoubleClicked);
+
+  layout->addWidget(m_tree);
+
+  setContentWidget(m_contentWidget);
+}
+
+void NMHierarchyPanel::onRefresh() { refresh(); }
+
+void NMHierarchyPanel::onExpandAll() {
+  if (m_tree) {
+    m_tree->expandAll();
+  }
+}
+
+void NMHierarchyPanel::onCollapseAll() {
+  if (m_tree) {
+    m_tree->collapseAll();
+  }
+}
+
+void NMHierarchyPanel::onBringForward() { adjustSelectedZ(1); }
+
+void NMHierarchyPanel::onSendBackward() { adjustSelectedZ(-1); }
+
+void NMHierarchyPanel::onBringToFront() { adjustSelectedZ(2); }
+
+void NMHierarchyPanel::onSendToBack() { adjustSelectedZ(-2); }
+
+void NMHierarchyPanel::adjustSelectedZ(int mode) {
+  if (!m_tree) {
+    return;
+  }
+  auto *scene = m_tree->scene();
+  if (!scene) {
+    return;
+  }
+
+  const auto items = m_tree->selectedItems();
+  if (items.isEmpty()) {
+    return;
+  }
+
+  const QString objectId = items.first()->data(0, Qt::UserRole).toString();
+  if (objectId.isEmpty()) {
+    return;
+  }
+
+  auto *obj = scene->findSceneObject(objectId);
+  if (!obj) {
+    return;
+  }
+
+  qreal oldZ = obj->zValue();
+  qreal newZ = oldZ;
+  qreal minZ = oldZ;
+  qreal maxZ = oldZ;
+  for (auto *other : scene->sceneObjects()) {
+    if (!other) {
+      continue;
+    }
+    minZ = std::min(minZ, other->zValue());
+    maxZ = std::max(maxZ, other->zValue());
+  }
+
+  switch (mode) {
+  case -2:
+    newZ = minZ - 1.0;
+    break;
+  case -1:
+    newZ = oldZ - 1.0;
+    break;
+  case 1:
+    newZ = oldZ + 1.0;
+    break;
+  case 2:
+    newZ = maxZ + 1.0;
+    break;
+  default:
+    break;
+  }
+
+  if (qFuzzyCompare(oldZ + 1.0, newZ + 1.0)) {
+    return;
+  }
+
+  if (m_sceneViewPanel) {
+    m_sceneViewPanel->setObjectZOrder(objectId, newZ);
+  } else {
+    scene->setObjectZOrder(objectId, newZ);
+  }
+  refresh();
+}
+
+} // namespace NovelMind::editor::qt

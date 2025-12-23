@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/close.svg</file>
+        <file>icons/float.svg</file>
+        <file>icons/branch-open.svg</file>
+        <file>icons/branch-closed.svg</file>
+        <file>icons/dropdown.svg</file>
+    </qresource>
+</RCC>

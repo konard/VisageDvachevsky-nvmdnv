@@ -1,0 +1,11 @@
+// Empty Project Template
+// Add your characters and scenes below
+
+// Example character (uncomment and modify):
+// character Protagonist(name="Name", color="#FFFFFF")
+
+// Main scene
+scene main {
+    // Add your content here
+    say Narrator "Welcome to your new visual novel!"
+}

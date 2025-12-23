@@ -1,0 +1,96 @@
+# NovelMind Project .gitignore
+# This file should be copied to new projects as .gitignore
+
+# Build outputs
+Build/
+build/
+bin/
+obj/
+*.nmpack
+*.exe
+*.app
+*.out
+
+# Editor cache and temporary files
+.nmcache/
+.editor/
+*.nmbak
+*.nmtmp
+~*
+*.autosave
+
+# Asset cache
+.asset_cache/
+*.thumbnail
+Thumbnails/
+
+# Generated files
+generated/
+*.generated.*
+
+# Logs and profiling
+*.log
+logs/
+*.profile
+profiles/
+crash_dumps/
+
+# Debug artifacts
+*.pdb
+*.dSYM/
+*.ilk
+*.exp
+*.lib
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# IDE and editor files
+.idea/
+.vscode/
+*.sln
+*.vcxproj*
+*.suo
+*.user
+*.userprefs
+.project
+.cproject
+.settings/
+*.sublime-*
+*.code-workspace
+
+# Backup files
+*.bak
+*.backup
+*.old
+*~
+
+# Temporary test/experiment files
+test_output/
+temp/
+tmp/
+
+# Local configuration (may contain sensitive data)
+local_config.json
+*.local.json
+secrets/
+
+# Voice recording work files (raw recordings)
+voice_raw/
+voice_wip/
+recordings/
+
+# Package manager caches
+node_modules/
+__pycache__/
+*.pyc
+.npm/
+.yarn/
+
+# Distribution packages (built releases)
+dist/
+release/
+packages/

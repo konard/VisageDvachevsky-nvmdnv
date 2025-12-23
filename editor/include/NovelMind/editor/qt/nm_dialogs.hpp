@@ -1,0 +1,231 @@
+#pragma once
+
+#include <QColor>
+#include <QDialog>
+#include <QLineEdit>
+#include <QList>
+#include <QString>
+#include <QStringList>
+
+class QComboBox;
+class QDoubleSpinBox;
+class QFrame;
+class QListView;
+class QLabel;
+class QPushButton;
+class QSpinBox;
+class QTreeView;
+class QFileSystemModel;
+class QSortFilterProxyModel;
+
+namespace NovelMind::editor::qt {
+
+enum class NMDialogButton {
+  None,
+  Ok,
+  Cancel,
+  Yes,
+  No,
+  Save,
+  Discard,
+  Close
+};
+
+enum class NMMessageType {
+  Info,
+  Warning,
+  Error,
+  Question
+};
+
+class NMMessageDialog final : public QDialog {
+  Q_OBJECT
+
+public:
+  NMMessageDialog(QWidget *parent, const QString &title, const QString &message,
+                  NMMessageType type,
+                  const QList<NMDialogButton> &buttons,
+                  NMDialogButton defaultButton = NMDialogButton::Ok);
+
+  [[nodiscard]] NMDialogButton choice() const { return m_choice; }
+
+  static NMDialogButton showInfo(QWidget *parent, const QString &title,
+                                 const QString &message);
+  static NMDialogButton showWarning(QWidget *parent, const QString &title,
+                                    const QString &message);
+  static NMDialogButton showError(QWidget *parent, const QString &title,
+                                  const QString &message);
+  static NMDialogButton showQuestion(QWidget *parent, const QString &title,
+                                     const QString &message,
+                                     const QList<NMDialogButton> &buttons,
+                                     NMDialogButton defaultButton);
+
+private:
+  void buildUi(const QString &message, NMMessageType type,
+               const QList<NMDialogButton> &buttons,
+               NMDialogButton defaultButton);
+
+  NMDialogButton m_choice = NMDialogButton::None;
+};
+
+class NMInputDialog final : public QDialog {
+  Q_OBJECT
+
+public:
+  static QString getText(QWidget *parent, const QString &title,
+                         const QString &label,
+                         QLineEdit::EchoMode mode = QLineEdit::Normal,
+                         const QString &text = QString(), bool *ok = nullptr);
+
+  static int getInt(QWidget *parent, const QString &title, const QString &label,
+                    int value = 0, int minValue = -2147483647,
+                    int maxValue = 2147483647, int step = 1,
+                    bool *ok = nullptr);
+
+  static double getDouble(QWidget *parent, const QString &title,
+                          const QString &label, double value = 0.0,
+                          double minValue = -1.0e308,
+                          double maxValue = 1.0e308, int decimals = 2,
+                          bool *ok = nullptr);
+
+private:
+  enum class InputType { Text, Int, Double };
+
+  explicit NMInputDialog(QWidget *parent, const QString &title,
+                         const QString &label, InputType type);
+
+  void configureText(const QString &text, QLineEdit::EchoMode mode);
+  void configureInt(int value, int minValue, int maxValue, int step);
+  void configureDouble(double value, double minValue, double maxValue,
+                       int decimals);
+
+  QString textValue() const;
+  int intValue() const;
+  double doubleValue() const;
+
+  QLabel *m_label = nullptr;
+  QLineEdit *m_textEdit = nullptr;
+  QSpinBox *m_intSpin = nullptr;
+  QDoubleSpinBox *m_doubleSpin = nullptr;
+  QPushButton *m_okButton = nullptr;
+  QPushButton *m_cancelButton = nullptr;
+  InputType m_type = InputType::Text;
+};
+
+class NMFileDialog final : public QDialog {
+  Q_OBJECT
+
+public:
+  enum class Mode { OpenFile, OpenFiles, SelectDirectory };
+
+  static QString getOpenFileName(QWidget *parent, const QString &title,
+                                 const QString &dir = QString(),
+                                 const QString &filter = QString());
+  static QStringList getOpenFileNames(QWidget *parent, const QString &title,
+                                      const QString &dir = QString(),
+                                      const QString &filter = QString());
+  static QString getExistingDirectory(QWidget *parent, const QString &title,
+                                      const QString &dir = QString());
+
+private:
+  explicit NMFileDialog(QWidget *parent, const QString &title, Mode mode,
+                        const QString &dir, const QString &filter);
+
+  void buildUi();
+  void applyFilter(const QString &filterText);
+  void setDirectory(const QString &path);
+  void updateAcceptState();
+  void updatePreview();
+  void acceptSelection();
+  QStringList selectedFilePaths() const;
+  QString selectedDirectoryPath() const;
+
+  Mode m_mode = Mode::OpenFile;
+  QString m_currentDir;
+  QStringList m_selectedPaths;
+
+  QTreeView *m_treeView = nullptr;
+  QListView *m_listView = nullptr;
+  QLineEdit *m_pathEdit = nullptr;
+  QComboBox *m_filterCombo = nullptr;
+  QLabel *m_selectionLabel = nullptr;
+  QPushButton *m_upButton = nullptr;
+  QPushButton *m_acceptButton = nullptr;
+  QPushButton *m_cancelButton = nullptr;
+  QLabel *m_previewImage = nullptr;
+  QLabel *m_previewName = nullptr;
+  QLabel *m_previewMeta = nullptr;
+
+  ::QFileSystemModel *m_dirModel = nullptr;
+  ::QFileSystemModel *m_fileModel = nullptr;
+  ::QSortFilterProxyModel *m_filterProxy = nullptr;
+};
+
+class NMColorDialog final : public QDialog {
+  Q_OBJECT
+
+public:
+  static QColor getColor(const QColor &initial, QWidget *parent = nullptr,
+                         const QString &title = QString(), bool *ok = nullptr);
+
+private:
+  explicit NMColorDialog(QWidget *parent, const QColor &initial,
+                         const QString &title);
+
+  void setColor(const QColor &color, bool updateFields = true);
+  QColor currentColor() const;
+  void syncFromHex();
+  void updatePreview();
+
+  QFrame *m_preview = nullptr;
+  QSpinBox *m_redSpin = nullptr;
+  QSpinBox *m_greenSpin = nullptr;
+  QSpinBox *m_blueSpin = nullptr;
+  QLineEdit *m_hexEdit = nullptr;
+  QPushButton *m_okButton = nullptr;
+  QPushButton *m_cancelButton = nullptr;
+};
+
+class NMNewProjectDialog final : public QDialog {
+  Q_OBJECT
+
+public:
+  explicit NMNewProjectDialog(QWidget *parent = nullptr);
+
+  void setTemplateOptions(const QStringList &templates);
+  void setTemplate(const QString &templateName);
+  void setProjectName(const QString &name);
+  void setBaseDirectory(const QString &directory);
+  void setResolution(const QString &resolution);
+  void setLocale(const QString &locale);
+
+  [[nodiscard]] QString projectName() const;
+  [[nodiscard]] QString baseDirectory() const;
+  [[nodiscard]] QString projectPath() const;
+  [[nodiscard]] QString templateName() const;
+  [[nodiscard]] QString resolution() const;
+  [[nodiscard]] QString locale() const;
+
+  // Common resolutions for visual novels
+  static QStringList standardResolutions();
+  // Common locales
+  static QStringList standardLocales();
+
+private:
+  void buildUi();
+  void updatePreview();
+  void updateCreateEnabled();
+  void browseDirectory();
+
+  QLineEdit *m_nameEdit = nullptr;
+  QLineEdit *m_directoryEdit = nullptr;
+  QComboBox *m_templateCombo = nullptr;
+  QComboBox *m_resolutionCombo = nullptr;
+  QComboBox *m_localeCombo = nullptr;
+  QLabel *m_pathPreview = nullptr;
+  QPushButton *m_browseButton = nullptr;
+  QPushButton *m_createButton = nullptr;
+  QPushButton *m_cancelButton = nullptr;
+};
+
+} // namespace NovelMind::editor::qt

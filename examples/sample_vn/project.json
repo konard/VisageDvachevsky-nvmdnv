@@ -1,0 +1,13 @@
+{
+    "name": "Sample Visual Novel",
+    "version": "1.0.0",
+    "author": "NovelMind Team",
+    "description": "A sample visual novel project demonstrating NovelMind features",
+    "startScene": "intro",
+    "defaultResolution": {
+        "width": 1920,
+        "height": 1080
+    },
+    "locales": ["en", "ja"],
+    "defaultLocale": "en"
+}

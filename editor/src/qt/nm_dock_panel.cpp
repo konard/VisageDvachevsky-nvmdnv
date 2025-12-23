@@ -1,0 +1,96 @@
+#include "NovelMind/editor/qt/nm_dock_panel.hpp"
+
+#include <QFocusEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
+
+namespace NovelMind::editor::qt {
+
+NMDockPanel::NMDockPanel(const QString& title, QWidget* parent)
+    : QDockWidget(title, parent)
+{
+    // Set default dock widget features
+    setFeatures(QDockWidget::DockWidgetClosable |
+                QDockWidget::DockWidgetMovable |
+                QDockWidget::DockWidgetFloatable);
+
+    // Enable focus tracking
+    setFocusPolicy(Qt::StrongFocus);
+}
+
+NMDockPanel::~NMDockPanel()
+{
+    onShutdown();
+}
+
+void NMDockPanel::onUpdate(double /*deltaTime*/)
+{
+    // Default implementation does nothing
+    // Subclasses override this for continuous updates
+}
+
+void NMDockPanel::onInitialize()
+{
+    // Default implementation does nothing
+    // Subclasses override this for initialization
+}
+
+void NMDockPanel::onShutdown()
+{
+    // Default implementation does nothing
+    // Subclasses override this for cleanup
+}
+
+void NMDockPanel::onFocusGained()
+{
+    // Default implementation does nothing
+}
+
+void NMDockPanel::onFocusLost()
+{
+    // Default implementation does nothing
+}
+
+void NMDockPanel::onResize(int /*width*/, int /*height*/)
+{
+    // Default implementation does nothing
+}
+
+void NMDockPanel::setContentWidget(QWidget* widget)
+{
+    m_contentWidget = widget;
+    setWidget(widget);
+}
+
+void NMDockPanel::focusInEvent(QFocusEvent* event)
+{
+    QDockWidget::focusInEvent(event);
+    onFocusGained();
+    emit focusGained();
+}
+
+void NMDockPanel::focusOutEvent(QFocusEvent* event)
+{
+    QDockWidget::focusOutEvent(event);
+    onFocusLost();
+    emit focusLost();
+}
+
+void NMDockPanel::resizeEvent(QResizeEvent* event)
+{
+    QDockWidget::resizeEvent(event);
+    onResize(event->size().width(), event->size().height());
+}
+
+void NMDockPanel::showEvent(QShowEvent* event)
+{
+    QDockWidget::showEvent(event);
+
+    if (!m_initialized)
+    {
+        m_initialized = true;
+        onInitialize();
+    }
+}
+
+} // namespace NovelMind::editor::qt

@@ -1,0 +1,132 @@
+#include "NovelMind/editor/qt/qt_selection_manager.hpp"
+#include "NovelMind/editor/qt/qt_event_bus.hpp"
+
+namespace NovelMind::editor::qt {
+
+QtSelectionManager &QtSelectionManager::instance() {
+  static QtSelectionManager instance;
+  return instance;
+}
+
+QtSelectionManager::QtSelectionManager() : QObject(nullptr) {}
+
+void QtSelectionManager::select(const QString &id, SelectionType type) {
+  if (m_selectedIds.size() == 1 && m_selectedIds.first() == id &&
+      m_currentType == type) {
+    return; // Already selected
+  }
+
+  m_selectedIds.clear();
+  m_selectedIds.append(id);
+  m_currentType = type;
+
+  notifySelectionChanged();
+}
+
+void QtSelectionManager::selectMultiple(const QStringList &ids,
+                                        SelectionType type) {
+  m_selectedIds = ids;
+  m_currentType = ids.isEmpty() ? SelectionType::None : type;
+
+  notifySelectionChanged();
+}
+
+void QtSelectionManager::addToSelection(const QString &id, SelectionType type) {
+  // Can only add items of the same type
+  if (!m_selectedIds.isEmpty() && m_currentType != type) {
+    // Clear and start new selection of this type
+    m_selectedIds.clear();
+  }
+
+  if (!m_selectedIds.contains(id)) {
+    m_selectedIds.append(id);
+    m_currentType = type;
+    notifySelectionChanged();
+  }
+}
+
+void QtSelectionManager::removeFromSelection(const QString &id) {
+  if (m_selectedIds.removeOne(id)) {
+    if (m_selectedIds.isEmpty()) {
+      m_currentType = SelectionType::None;
+    }
+    notifySelectionChanged();
+  }
+}
+
+void QtSelectionManager::toggleSelection(const QString &id,
+                                         SelectionType type) {
+  if (m_selectedIds.contains(id)) {
+    removeFromSelection(id);
+  } else {
+    addToSelection(id, type);
+  }
+}
+
+void QtSelectionManager::clearSelection() {
+  if (m_selectedIds.isEmpty())
+    return;
+
+  m_selectedIds.clear();
+  m_currentType = SelectionType::None;
+
+  emit selectionCleared();
+  notifySelectionChanged();
+}
+
+bool QtSelectionManager::hasSelection() const {
+  return !m_selectedIds.isEmpty();
+}
+
+SelectionType QtSelectionManager::currentSelectionType() const {
+  return m_currentType;
+}
+
+QStringList QtSelectionManager::selectedIds() const { return m_selectedIds; }
+
+QString QtSelectionManager::primarySelection() const {
+  return m_selectedIds.isEmpty() ? QString() : m_selectedIds.first();
+}
+
+int QtSelectionManager::selectionCount() const {
+  return static_cast<int>(m_selectedIds.size());
+}
+
+bool QtSelectionManager::isSelected(const QString &id) const {
+  return m_selectedIds.contains(id);
+}
+
+void QtSelectionManager::notifySelectionChanged() {
+  emit selectionChanged(m_selectedIds, m_currentType);
+
+  if (!m_selectedIds.isEmpty()) {
+    emit primarySelectionChanged(m_selectedIds.first(), m_currentType);
+  }
+
+  // Also notify via event bus for non-Qt subscribers
+  QString typeStr;
+  switch (m_currentType) {
+  case SelectionType::SceneObject:
+    typeStr = "SceneObject";
+    break;
+  case SelectionType::GraphNode:
+    typeStr = "GraphNode";
+    break;
+  case SelectionType::TimelineItem:
+    typeStr = "TimelineItem";
+    break;
+  case SelectionType::Asset:
+    typeStr = "Asset";
+    break;
+  case SelectionType::HierarchyItem:
+    typeStr = "HierarchyItem";
+    break;
+  default:
+    typeStr = "None";
+    break;
+  }
+
+  QtEventBus::instance().publishSelectionChanged(m_selectedIds, typeStr);
+}
+
+} // namespace NovelMind::editor::qt

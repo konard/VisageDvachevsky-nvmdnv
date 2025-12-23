@@ -1,0 +1,13 @@
+{
+    "name": "Atlas Signal",
+    "version": "0.1.0",
+    "author": "NovelMind Test",
+    "description": "Large test visual novel showcasing NM Script features",
+    "startScene": "prologue",
+    "defaultResolution": {
+        "width": 1920,
+        "height": 1080
+    },
+    "locales": ["en"],
+    "defaultLocale": "en"
+}

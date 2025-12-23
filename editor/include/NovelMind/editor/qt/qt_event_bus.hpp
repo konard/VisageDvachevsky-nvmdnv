@@ -1,0 +1,162 @@
+#pragma once
+
+/**
+ * @file qt_event_bus.hpp
+ * @brief Qt-based Event Bus for editor communication
+ *
+ * Wraps the existing EventBus with Qt signals/slots for seamless
+ * integration with Qt widgets.
+ */
+
+#include <QObject>
+#include <QString>
+#include <QVariant>
+#include <functional>
+#include <memory>
+
+namespace NovelMind::editor::qt {
+
+/**
+ * @brief Qt-compatible event types
+ */
+enum class QtEditorEventType {
+  SelectionChanged,
+  PropertyChanged,
+  GraphNodeAdded,
+  GraphNodeRemoved,
+  GraphConnectionAdded,
+  GraphConnectionRemoved,
+  ProjectOpened,
+  ProjectClosed,
+  ProjectSaved,
+  UndoPerformed,
+  RedoPerformed,
+  PlayModeStarted,
+  PlayModeStopped,
+  LogMessage,
+  ErrorOccurred,
+  Custom
+};
+
+/**
+ * @brief Qt-based event data
+ */
+struct QtEditorEvent {
+  QtEditorEventType type = QtEditorEventType::Custom;
+  QString source;
+  QVariantMap data;
+};
+
+/**
+ * @brief Qt Event Bus singleton for editor-wide communication
+ *
+ * This class provides a Qt signals/slots based event system that integrates
+ * with the existing C++ EventBus while providing Qt-native interfaces.
+ */
+class QtEventBus : public QObject {
+  Q_OBJECT
+
+public:
+  /**
+   * @brief Get the singleton instance
+   */
+  static QtEventBus &instance();
+
+  /**
+   * @brief Publish an event
+   */
+  void publish(const QtEditorEvent &event);
+
+  /**
+   * @brief Convenience method to publish selection change
+   */
+  void publishSelectionChanged(const QStringList &selectedIds,
+                               const QString &selectionType);
+
+  /**
+   * @brief Convenience method to publish property change
+   */
+  void publishPropertyChanged(const QString &objectId,
+                              const QString &propertyName,
+                              const QVariant &oldValue,
+                              const QVariant &newValue);
+
+  /**
+   * @brief Convenience method to publish log message
+   */
+  void publishLogMessage(const QString &message, const QString &source,
+                         int level);
+
+signals:
+  /**
+   * @brief Emitted for all events
+   */
+  void eventPublished(const QtEditorEvent &event);
+
+  /**
+   * @brief Emitted when selection changes
+   */
+  void selectionChanged(const QStringList &selectedIds,
+                        const QString &selectionType);
+
+  /**
+   * @brief Emitted when a property changes
+   */
+  void propertyChanged(const QString &objectId, const QString &propertyName,
+                       const QVariant &oldValue, const QVariant &newValue);
+
+  /**
+   * @brief Emitted when a project is opened
+   */
+  void projectOpened(const QString &projectPath);
+
+  /**
+   * @brief Emitted when a project is closed
+   */
+  void projectClosed();
+
+  /**
+   * @brief Emitted when a project is saved
+   */
+  void projectSaved(const QString &projectPath);
+
+  /**
+   * @brief Emitted when undo is performed
+   */
+  void undoPerformed(const QString &actionDescription);
+
+  /**
+   * @brief Emitted when redo is performed
+   */
+  void redoPerformed(const QString &actionDescription);
+
+  /**
+   * @brief Emitted when play mode starts
+   */
+  void playModeStarted();
+
+  /**
+   * @brief Emitted when play mode stops
+   */
+  void playModeStopped();
+
+  /**
+   * @brief Emitted for log messages
+   */
+  void logMessage(const QString &message, const QString &source, int level);
+
+  /**
+   * @brief Emitted on errors
+   */
+  void errorOccurred(const QString &message, const QString &details);
+
+private:
+  QtEventBus();
+  ~QtEventBus() override = default;
+
+  // Prevent copying
+  QtEventBus(const QtEventBus &) = delete;
+  QtEventBus &operator=(const QtEventBus &) = delete;
+};
+
+} // namespace NovelMind::editor::qt

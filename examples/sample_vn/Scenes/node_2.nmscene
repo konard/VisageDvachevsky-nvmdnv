@@ -1,0 +1,37 @@
+{
+    "objects": [
+        {
+            "alpha": 1,
+            "id": "background_1766219748298",
+            "name": "New Background",
+            "properties": {
+                "name": "New Background"
+            },
+            "rotation": 0,
+            "scaleX": 0.9756972193717957,
+            "scaleY": 0.9756972193717957,
+            "type": "Background",
+            "visible": true,
+            "x": 147.10580444335938,
+            "y": -29.421159744262695,
+            "zOrder": 0
+        },
+        {
+            "alpha": 1,
+            "id": "character_1766219760381",
+            "name": "New Character",
+            "properties": {
+                "name": "New Character"
+            },
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1,
+            "type": "Character",
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "zOrder": 0
+        }
+    ],
+    "sceneId": "node_2"
+}

@@ -1,0 +1,39 @@
+{
+    "objects": [
+        {
+            "alpha": 1,
+            "id": "background_main",
+            "name": "Background",
+            "properties": {
+                "name": "Background",
+                "textureId": "title.png"
+            },
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1,
+            "type": "Background",
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "zOrder": 0
+        },
+        {
+            "alpha": 1,
+            "id": "character_hero_main",
+            "name": "Hero",
+            "properties": {
+                "name": "Hero",
+                "textureId": "Assets/Елагин PresiDENT 8jun230109 (1)-Photoroom.png"
+            },
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1,
+            "type": "Character",
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "zOrder": 1
+        }
+    ],
+    "sceneId": "main"
+}

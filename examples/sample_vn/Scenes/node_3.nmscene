@@ -1,0 +1,21 @@
+{
+    "objects": [
+        {
+            "alpha": 1,
+            "id": "character_1766219801512",
+            "name": "New Character",
+            "properties": {
+                "name": "New Character"
+            },
+            "rotation": 0,
+            "scaleX": 3.3158016204833984,
+            "scaleY": 3.3158016204833984,
+            "type": "Character",
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "zOrder": 0
+        }
+    ],
+    "sceneId": "node_3"
+}

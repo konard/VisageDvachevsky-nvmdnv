@@ -1,0 +1,4 @@
+// node_3
+scene node_3 {
+    say "New scene"
+}

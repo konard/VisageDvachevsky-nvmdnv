@@ -1,0 +1,13 @@
+{
+    "name": "Kinetic Novel",
+    "version": "1.0.0",
+    "author": "",
+    "description": "A linear story without branching paths",
+    "startScene": "chapter_1",
+    "defaultResolution": {
+        "width": 1920,
+        "height": 1080
+    },
+    "locales": ["en"],
+    "defaultLocale": "en"
+}

@@ -1,0 +1,61 @@
+// Kinetic Novel Template
+// A linear story without player choices
+
+character Protagonist(name="Protagonist", color="#4A90D9")
+character Narrator(name="", color="#AAAAAA")
+
+// Chapter 1
+scene chapter_1 {
+    show background "bg_chapter_1"
+    transition fade 1.5
+
+    say Narrator "Chapter 1: The Beginning"
+
+    wait 1.0
+
+    show Protagonist at center
+
+    say Protagonist "This is where our story starts."
+    say Protagonist "Follow along as events unfold."
+
+    say Narrator "The tale continues..."
+
+    goto chapter_2
+}
+
+// Chapter 2
+scene chapter_2 {
+    transition dissolve 0.5
+    show background "bg_chapter_2"
+
+    say Narrator "Chapter 2: The Journey"
+
+    say Protagonist "The plot thickens here."
+
+    say Narrator "More events occur..."
+
+    goto chapter_3
+}
+
+// Chapter 3
+scene chapter_3 {
+    transition dissolve 0.5
+    show background "bg_chapter_3"
+
+    say Narrator "Chapter 3: The Conclusion"
+
+    say Protagonist "And so we reach the end."
+
+    say Narrator "The story concludes."
+
+    goto ending
+}
+
+// Ending
+scene ending {
+    hide Protagonist
+    transition fade 2.0
+
+    say Narrator "THE END"
+    say Narrator "Thank you for reading."
+}
